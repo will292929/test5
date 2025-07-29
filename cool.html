@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Visual GitHub Pages Editor</title>
+  <style>
+  .iframe-wrapper {
+    position: relative;
+    display: inline-block;
+  }
+  .iframe-wrapper iframe {
+    display: block;
+  }
+  .iframe-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    z-index: 1000;
+    cursor: pointer;
+  }
+</style>
+
+  <style>
+    body { font-family: sans-serif; margin: 0; overflow: hidden; }
+    #editor { padding: 20px; }
+    #editor iframe { width: 100%; height: calc(100vh - 60px); border: none; }
+    #commitBtn { position: fixed; bottom: 20px; right: 20px; padding: 10px 20px; background-color: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; z-index: 1000; }
+    .hover-highlight { outline: 2px dashed red; }
+    .edit-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.3); z-index: 1999; }
+    .edit-overlay { position: fixed; min-width: 320px; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 1px solid #ccc; padding: 20px; z-index: 2000; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    .edit-overlay select, .edit-overlay button { margin-top: 10px; margin-right: 10px; }
+    .dormant {
+      display: none !important;
+    }
+    .dormant-revealed {
+      display: inline-block !important;
+      outline: 2px dotted #e67e22 !important;
+      background: #fffbe6 !important;
+      color: #e67e22 !important;
+      opacity: 0.8;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+<div id="editor"><iframe id="pageFrame"></iframe></div>
+<button id="commitBtn">💾 Commit Changes</button>
+<script>
+const USERNAME = 'will292929';
+const REPO = 'test5';
+let FILE_PATH = 'index.html';
+const BRANCH = 'main';
+let TOKEN = localStorage.getItem('github_token') || prompt('Enter GitHub Token:');
+if (TOKEN) localStorage.setItem('github_token', TOKEN);
+
+
+const frame = document.getElementById('pageFrame');
+let spaceHeld = false, spaceJustUsed = false, sha = '';
+
+
+// Listen globally for spacebar mode
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !spaceHeld) {
+    spaceHeld = true;
+    spaceJustUsed = false;
+  }
+});
+window.addEventListener('keyup', e => {
+  if (e.code === 'Space') {
+    spaceHeld = false;
+    spaceJustUsed = false;
+  }
+});
+
+
+function attachAllHandlers(doc) {
+  // ✅ Clean up any previous wrappers
+  doc.querySelectorAll('.iframe-wrapper').forEach(wrapper => {
+    const iframe = wrapper.querySelector('iframe');
+    if (iframe) {
+      wrapper.parentNode.insertBefore(iframe, wrapper);
+      wrapper.remove();
+    }
+  });
+
+  // ✅ Remove old handlers
+  doc.querySelectorAll('[data-editor-attached]').forEach(el => {
+    el.removeAttribute('data-editor-attached');
+    el.onclick = null;
+  });
+
+  const elements = doc.querySelectorAll('a,img,button,iframe,span,p,div,h1,h2,h3,h4,h5,h6,strong,b,em');
+
+  elements.forEach(el => {
+    const tag = el.tagName.toLowerCase();
+    const text = el.innerText?.trim();
+    const hasText = !!text;
+
+    // ❌ Skip dormant unless revealed
+    if (el.classList.contains('dormant') && !dormantVisible) return;
+
+    // ✅ Special iframe handling — add overlay wrapper only once
+    if (tag === 'iframe') {
+      if (!el.parentElement?.classList?.contains('iframe-wrapper')) {
+        const wrapper = doc.createElement('div');
+        wrapper.className = 'iframe-wrapper';
+        wrapper.style.position = 'relative';
+        wrapper.style.display = 'inline-block';
+        wrapper.style.width = el.offsetWidth + 'px';
+        wrapper.style.height = el.offsetHeight + 'px';
+
+        const overlay = doc.createElement('div');
+        overlay.className = 'iframe-overlay';
+        overlay.style.position = 'absolute';
+        overlay.style.top = 0;
+        overlay.style.left = 0;
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.background = 'transparent';
+        overlay.style.zIndex = 1000;
+        overlay.style.cursor = 'pointer';
+
+        el.parentNode.insertBefore(wrapper, el);
+        wrapper.appendChild(el);
+        wrapper.appendChild(overlay);
+
+        overlay.setAttribute('data-editor-attached', 'yes');
+        overlay.onclick = () => el.click();
+      }
+      return; // skip the iframe itself
+    }
+
+    // ❌ Skip large containers (with multiple children or nested blocks)
+    const childTags = Array.from(el.children).map(c => c.tagName?.toLowerCase());
+    const isAtomic = childTags.length <= 1 && !childTags.some(t => ['p','div','section','h1','h2','h3','h4'].includes(t));
+    if (!['img', 'a', 'iframe', 'button'].includes(tag) && !isAtomic) return;
+
+    el.setAttribute('data-editor-attached', 'yes');
+
+    el.onclick = async e => {
+      const iframeSpaceHeld = doc._iframeSpaceHeld || false;
+      const fullSpaceHeld = spaceHeld || iframeSpaceHeld;
+
+      // 🔗 Identify editable attribute
+      let attr = null;
+      if (tag === 'a') attr = 'href';
+      else if (['img', 'iframe'].includes(tag)) attr = 'src';
+      else if (tag === 'button') {
+        if (el.hasAttribute('href')) attr = 'href';
+        else if (el.hasAttribute('data-link')) attr = 'data-link';
+        else if (el.hasAttribute('onclick')) attr = 'onclick';
+      }
+      else if (tag === 'div' && el.hasAttribute('src')) {
+        const innerA = el.querySelector('a');
+        if (innerA) {
+            attr = 'href';
+            el = innerA; // now edits will target the <a>
+        }
+      }
+
+
+      // ⌨️ Spacebar link follow behavior
+      if (fullSpaceHeld && !spaceJustUsed) {
+        spaceJustUsed = true;
+        if (attr && el.getAttribute(attr)) {
+          window.open(el.getAttribute(attr), '_blank');
+        }
+        return;
+      }
+      if (fullSpaceHeld) return;
+
+      e.preventDefault();
+      document.querySelectorAll('.edit-backdrop, .edit-overlay').forEach(x => x.remove());
+
+      // 🧠 Build overlay
+      const overlay = document.createElement('div');
+      overlay.className = 'edit-overlay';
+      const backdrop = document.createElement('div');
+      backdrop.className = 'edit-backdrop';
+
+      overlay.innerHTML = `
+        <label>Edit Element:</label>
+        <select id="editChoice">
+          <option value="">Cancel</option>
+          <option value="url">URL</option>
+          <option value="text">Text</option>
+          <option value="browse">Browse & Upload Image</option>
+          <option value="dormant">Make Dormant</option>
+          ${(el.classList.contains('dormant') || el.classList.contains('dormant-revealed')) ? '<option value="restore">Restore</option>' : ''}
+        </select>
+        <button id="editOk">OK</button>
+        <input type="file" id="imgInput" accept="image/*" style="display:none;margin-top:10px;" />
+      `;
+
+      document.body.append(backdrop, overlay);
+      const select = overlay.querySelector('#editChoice');
+      const imgInput = overlay.querySelector('#imgInput');
+
+      select.onchange = () => imgInput.style.display = (select.value === 'browse') ? 'block' : 'none';
+      backdrop.onclick = () => { overlay.remove(); backdrop.remove(); };
+
+      document.getElementById('editOk').onclick = async () => {
+        const choice = select.value;
+        overlay.remove(); backdrop.remove();
+        if (!choice) return;
+
+        if (choice === 'url') {
+          const current = el.getAttribute(attr || 'src') || '';
+          const newVal = prompt("Edit URL:", current);
+          if (newVal !== null) {
+            if (tag === 'button') {
+            // Prefer data-link if present
+              if (el.hasAttribute('data-link')) {
+                el.setAttribute('data-link', newVal);
+              } else {
+                el.setAttribute('onclick', `location.href='${newVal}'`);
+              }
+            } else {
+              el.setAttribute(attr || 'src', newVal);
+              if (tag === 'iframe') el.src = newVal;
+            }
+          }
+        }
+
+
+        else if (choice === 'text') {
+          // Recursively find first real text node
+          function findTextNode(node) {
+            if (!node) return null;
+            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) return node;
+            for (let child of node.childNodes) {
+              const found = findTextNode(child);
+              if (found) return found;
+            }
+            return null;
+          }
+
+          const textNode = findTextNode(el);
+          const current = textNode?.textContent.trim() || el.innerText.trim();
+          const newText = prompt("Edit text:", current);
+
+          if (newText !== null) {
+            if (textNode) {
+              textNode.textContent = newText;
+            } else {
+              el.appendChild(document.createTextNode(newText));
+            }
+          }
+        }
+
+
+
+        else if (choice === 'browse') {
+          imgInput.click();
+          imgInput.onchange = async () => {
+            const file = imgInput.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+              try {
+                const b64 = reader.result.split(',')[1];
+                const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, '_').toLowerCase();
+                const githubPath = `images/${safeName}`;
+                await apiCommit(githubPath, b64, `Upload image ${safeName}`);
+
+                el.setAttribute(attr || 'src', githubPath);
+                if (tag === 'img') el.src = githubPath;
+                setTimeout(() => attachAllHandlers(doc), 50);
+                alert(`✅ Uploaded and linked: ${githubPath}`);
+              } catch (err) {
+                alert('❌ Upload failed: ' + err.message);
+              }
+            };
+            reader.onerror = () => alert("❌ Could not read file.");
+            reader.readAsDataURL(file);
+          };
+          return;
+        }
+
+        else if (choice === 'dormant') {
+          el.classList.add('dormant');
+          el.classList.remove('dormant-revealed');
+          if (attr) {
+            el.setAttribute(`data-original-${attr}`, el.getAttribute(attr) || '');
+            el.removeAttribute(attr);
+          }
+          if (el.innerText) {
+            el.setAttribute('data-original-text', el.innerText);
+            el.innerText = '';
+          }
+        }
+
+        else if (choice === 'restore') {
+          el.classList.remove('dormant');
+          el.classList.remove('dormant-revealed');
+          const originalText = el.getAttribute('data-original-text');
+          if (originalText) {
+            el.innerText = originalText;
+            el.removeAttribute('data-original-text');
+          }
+
+          const attrs = ['src', 'href', 'data-link', 'onclick'];
+          atts.forEach(attr => {
+            const original = el.getAttribute(`data-original-${attr}`);
+            if (original) {
+              el.setAttribute(attr, original);
+              el.removeAttribute(`data-original-${attr}`);
+            }
+          });
+        }
+
+        setTimeout(() => attachAllHandlers(doc), 50);
+      };
+    };
+  });
+}
+
+
+
+
+
+
+function showDormantElements(show) {
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  const dormantEls = doc.querySelectorAll('.dormant, .dormant-revealed');
+
+  dormantEls.forEach(el => {
+    if (show) {
+      // Convert .dormant ➜ .dormant-revealed
+      el.classList.remove('dormant');
+      el.classList.add('dormant-revealed');
+
+      // Restore text
+      const text = el.getAttribute('data-original-text');
+      if (text && el.innerText.trim() === '') {
+        el.innerText = text;
+      }
+
+      // Restore src, href, etc
+      const attrs = ['src', 'href', 'data-link', 'onclick'];
+      attrs.forEach(attr => {
+        const original = el.getAttribute(`data-original-${attr}`);
+        if (original && !el.getAttribute(attr)) {
+          el.setAttribute(attr, original);
+        }
+      });
+    } else {
+      // Convert .dormant-revealed ➜ .dormant
+      el.classList.add('dormant');
+      el.classList.remove('dormant-revealed');
+
+      // Hide content (do NOT delete original values)
+      el.innerText = '';
+      const attrs = ['src', 'href', 'data-link', 'onclick'];
+      attrs.forEach(attr => {
+        if (el.hasAttribute(attr)) {
+          el.removeAttribute(attr);
+        }
+      });
+    }
+  });
+
+  attachAllHandlers(doc);
+}
+
+
+
+
+
+const dormantBtn = document.createElement('button');
+dormantBtn.textContent = "👁️ Show Dormant";
+dormantBtn.style.position = "fixed";
+dormantBtn.style.bottom = "65px";
+dormantBtn.style.right = "20px";
+dormantBtn.style.zIndex = "1001";
+document.body.appendChild(dormantBtn);
+let dormantVisible = false;
+dormantBtn.onclick = () => {
+  dormantVisible = !dormantVisible;
+  showDormantElements(dormantVisible);
+  dormantBtn.textContent = dormantVisible ? "🙈 Hide Dormant" : "👁️ Show Dormant";
+};
+
+
+async function apiCommit(path, contentB64, message) {
+  let fileSha = undefined;
+
+  if (path !== FILE_PATH) {
+    // Try to get existing SHA for this file
+    const res = await fetch(`https://api.github.com/repos/${USERNAME}/${REPO}/contents/${path}`, {
+      headers: { 'Authorization': `Bearer ${TOKEN}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      fileSha = data.sha;
+    }
+  } else {
+    fileSha = sha; // known from index.html load
+  }
+
+  const res = await fetch(`https://api.github.com/repos/${USERNAME}/${REPO}/contents/${path}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      message,
+      content: contentB64,
+      sha: fileSha,
+      branch: BRANCH
+    })
+  });
+
+  return res.ok ? await res.json() : Promise.reject(await res.json());
+}
+
+
+
+async function loadHTML(){
+  try{
+    const r=await fetch(`https://api.github.com/repos/${USERNAME}/${REPO}/contents/${FILE_PATH}`,{ headers:{ 'Authorization':`Bearer ${TOKEN}` }});
+    const j=await r.json();
+    const html=atob(j.content);
+    sha=j.sha;
+    frame.srcdoc = html;
+  }catch(e){alert('Load failed:'+e);}
+}
+
+
+frame.onload = () => {
+  const doc = frame.contentDocument;
+  doc._iframeSpaceHeld = false;
+  doc.addEventListener('keydown', ev => { if (ev.code === 'Space') doc._iframeSpaceHeld = true; });
+  doc.addEventListener('keyup', ev => { if (ev.code === 'Space') doc._iframeSpaceHeld = false; });
+  showDormantElements(dormantVisible);
+  attachAllHandlers(doc);
+};
+
+
+const commitBtn=document.getElementById('commitBtn');
+commitBtn.onclick = async () => {
+  try {
+    const doc = frame.contentDocument || frame.contentWindow.document;
+
+    // 🔍 Temporarily show all dormant content
+    const dormantEls = doc.querySelectorAll('.dormant, .dormant-revealed');
+    dormantEls.forEach(el => {
+      if (el.classList.contains('dormant-revealed')) {
+        el.classList.remove('dormant-revealed');
+        el.classList.add('dormant');
+      }
+    });
+
+    // ✅ Ensure dormant style is injected (already correct)
+    const dormantStyle = `.dormant {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      height: 0 !important;
+      width: 0 !important;
+      overflow: hidden !important;
+    }
+    .dormant-revealed {
+      opacity: 0.3 !important;
+      pointer-events: auto !important;
+      outline: 2px dotted #e67e22 !important;
+      background: #fffbe6 !important;
+      color: #e67e22 !important;
+      cursor: pointer !important;
+    }`;
+    let head = doc.querySelector('head');
+    if (head && !doc.querySelector('style[data-dormant]')) {
+      const style = doc.createElement('style');
+      style.setAttribute('data-dormant', 'yes');
+      style.textContent = dormantStyle;
+      head.appendChild(style);
+    }
+
+    // 🔐 Serialize and commit HTML
+    const newHTML = doc.documentElement.outerHTML;
+    const enc = btoa(unescape(encodeURIComponent(newHTML)));
+    await apiCommit(FILE_PATH, enc, 'Commit from editor');
+    alert('✅ Committed');
+
+    // 🔄 Reload content and restore view
+    await loadHTML();
+
+  } catch (e) {
+    alert('Commit failed: ' + JSON.stringify(e));
+  }
+};
+
+
+
+loadHTML();
+</script>
+</body>
+</html>
