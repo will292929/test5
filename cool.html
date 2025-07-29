@@ -1,39 +1,706 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>Visual GitHub Pages Editor</title>
   <style>
-  .iframe-wrapper {
-    position: relative;
-    display: inline-block;
-  }
-  .iframe-wrapper iframe {
-    display: block;
-  }
-  .iframe-overlay {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%;
-    height: 100%;
-    background: transparent;
-    z-index: 1000;
-    cursor: pointer;
-  }
-</style>
+.iframe-wrapper {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+}
+.iframe-overlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: transparent;
+  z-index: 1000;
+  cursor: pointer;
+}
+.edit-backdrop {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.3);
+  z-index: 1999;
+}
+.edit-overlay {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border: 1px solid #ccc;
+  padding: 20px;
+  z-index: 2000;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+  </style>
 
   <style>
-    body { font-family: sans-serif; margin: 0; overflow: hidden; }
-    #editor { padding: 20px; }
-    #editor iframe { width: 100%; height: calc(100vh - 60px); border: none; }
-    #commitBtn { position: fixed; bottom: 20px; right: 20px; padding: 10px 20px; background-color: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; z-index: 1000; }
-    .hover-highlight { outline: 2px dashed red; }
-    .edit-backdrop { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.3); z-index: 1999; }
-    .edit-overlay { position: fixed; min-width: 320px; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 1px solid #ccc; padding: 20px; z-index: 2000; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-    .edit-overlay select, .edit-overlay button { margin-top: 10px; margin-right: 10px; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      overflow: hidden;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+
+    /* Fancy animations */
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3); }
+      50% { box-shadow: 0 4px 25px rgba(0, 123, 255, 0.6); }
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    @keyframes fadeInUp {
+      from { transform: translateY(30px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    #editor {
+      padding: 20px;
+      animation: fadeInUp 0.8s ease-out;
+      position: relative;
+    }
+
+    #editor::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(45deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+      border-radius: 15px;
+      z-index: -1;
+      backdrop-filter: blur(10px);
+    }
+
+
+
+    #editor iframe {
+      width: 100%;
+      height: calc(100vh - 60px);
+      border: none;
+    }
+
+    #commitBtn {
+      position: fixed;
+      bottom: 20px;
+      right: 10px;
+      padding: 16px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      font-weight: 700;
+      cursor: pointer;
+      z-index: 9999;
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      width: 140px;
+      height: 60px;
+      justify-content: center;
+      animation: slideIn 0.6s ease-out;
+      backdrop-filter: blur(15px);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      position: relative;
+      overflow: hidden;
+      clip-path: polygon(20% 0%, 80% 0%, 100% 50%, 80% 100%, 20% 100%, 0% 50%);
+      transform: rotate(0deg);
+    }
+
+    #commitBtn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+      transition: left 0.6s;
+      clip-path: polygon(20% 0%, 80% 0%, 100% 50%, 80% 100%, 20% 100%, 0% 50%);
+    }
+
+    #commitBtn:hover::before {
+      left: 100%;
+    }
+
+    #commitBtn:hover {
+      transform: translateY(-4px) scale(1.08) rotate(-3deg);
+      box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
+      background: linear-gradient(135deg, #7c8ff0 0%, #8a5bb8 100%);
+    }
+
+    #commitBtn:active {
+      transform: translateY(-2px) scale(0.95) rotate(-7deg);
+      box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+    }
+
+    #commitBtn:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top: 2px solid white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .commit-status {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      padding: 20px 30px;
+      border-radius: 12px;
+      z-index: 3000;
+      text-align: center;
+      display: none;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .commit-status .spinner {
+      display: inline-block;
+      margin-bottom: 15px;
+    }
+
+    /* Enhanced status bar with types */
+    .status-info {
+      background: linear-gradient(135deg, rgba(0,123,255,0.9), rgba(0,86,179,0.8)) !important;
+    }
+
+    .status-success {
+      background: linear-gradient(135deg, rgba(40,167,69,0.9), rgba(32,201,151,0.8)) !important;
+    }
+
+    .status-warning {
+      background: linear-gradient(135deg, rgba(255,193,7,0.9), rgba(224,168,0,0.8)) !important;
+      color: black !important;
+    }
+
+    .status-error {
+      background: linear-gradient(135deg, rgba(220,53,69,0.9), rgba(200,35,51,0.8)) !important;
+    }
+
+    /* Quick actions panel */
+    .quick-actions {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(135deg, #ffffff, #f8f9fa);
+      border-radius: 16px;
+      padding: 25px;
+      z-index: 2500;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      max-width: 350px;
+      text-align: center;
+      display: none;
+    }
+
+    .quick-actions h3 {
+      margin: 0 0 20px 0;
+      color: #2c3e50;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .action-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      margin: 8px 0;
+      background: white;
+      border: 2px solid #e9ecef;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .action-item:hover {
+      border-color: #007bff;
+      background: #f8f9ff;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+    }
+
+    .action-item .icon {
+      margin-right: 12px;
+      font-size: 20px;
+    }
+
+    /* Progress bar for operations */
+    .progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 0%;
+      height: 3px;
+      background: linear-gradient(90deg, #007bff, #28a745);
+      z-index: 10000;
+      transition: width 0.3s ease;
+    }
+
+    /* Floating action button */
+    .fab {
+      position: fixed;
+      bottom: 80px;
+      right: 20px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6f42c1, #5a32a3);
+      color: white;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(111, 66, 193, 0.3);
+      transition: all 0.3s ease;
+      z-index: 9999;
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .fab:hover {
+      transform: translateY(-2px) scale(1.1);
+      box-shadow: 0 6px 20px rgba(111, 66, 193, 0.4);
+    }
+
+    /* Keyboard shortcuts indicator */
+    .shortcuts-hint {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      z-index: 9999;
+      opacity: 0.7;
+      transition: opacity 0.3s ease;
+    }
+
+    .shortcuts-hint:hover {
+      opacity: 1;
+    }
+
+    /* Dark mode styles */
+    .dark-mode {
+      background: #1a1a1a !important;
+      color: #ffffff !important;
+    }
+
+    .dark-mode #editor {
+      background: #2d2d2d !important;
+    }
+
+    .dark-mode .edit-overlay {
+      background: linear-gradient(135deg, #2d2d2d, #1a1a1a) !important;
+      color: #ffffff !important;
+    }
+
+    .dark-mode .edit-overlay input,
+    .dark-mode .edit-overlay select,
+    .dark-mode .edit-overlay textarea {
+      background: #3d3d3d !important;
+      color: #ffffff !important;
+      border-color: #555 !important;
+    }
+
+    .dark-mode .edit-option {
+      background: #3d3d3d !important;
+      color: #ffffff !important;
+      border-color: #555 !important;
+    }
+
+    .dark-mode .action-item {
+      background: #3d3d3d !important;
+      color: #ffffff !important;
+      border-color: #555 !important;
+    }
+
+    .dark-mode .action-item:hover {
+      background: #4d4d4d !important;
+      border-color: #007bff !important;
+    }
+
+    /* Bulk styling button hover effects */
+    #applyToSameBgColor:hover,
+    #applyToSameTextColor:hover,
+    #applyToSameTag:hover {
+      background: #007bff !important;
+      color: white !important;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    }
+
+    .hover-highlight {
+      outline: 2px dashed red;
+    }
+
+    .edit-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.3);
+      z-index: 1900;
+    }
+
+    .edit-overlay {
+      position: fixed;
+      min-width: 380px;
+      max-width: 500px;
+      max-height: 80vh;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(135deg, #ffffff, #f8f9fa);
+      border: none;
+      border-radius: 20px;
+      padding: 30px;
+      z-index: 2100;
+      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      overflow-y: auto;
+      overflow-x: hidden;
+      animation: fadeInUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .edit-overlay h3 {
+      margin: 0 0 20px 0;
+      color: #2c3e50;
+      font-size: 18px;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .edit-overlay label {
+      display: block;
+      margin-bottom: 8px;
+      color: #495057;
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    .edit-overlay select {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e9ecef;
+      border-radius: 8px;
+      background: white;
+      font-size: 14px;
+      margin-bottom: 15px;
+      transition: border-color 0.3s ease;
+      cursor: pointer;
+    }
+
+    .edit-overlay select:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+    }
+
+    .edit-overlay button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+
+    .edit-overlay button.primary {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      border-radius: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .edit-overlay button.primary::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: left 0.6s;
+    }
+
+    .edit-overlay button.primary:hover::before {
+      left: 100%;
+    }
+
+    .edit-overlay button.primary:hover {
+      transform: translateY(-3px) scale(1.05);
+      box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+      background: linear-gradient(135deg, #7c8ff0, #8a5bb8);
+    }
+
+    .edit-overlay button.secondary {
+      background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+      color: white;
+      border-radius: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .edit-overlay button.secondary::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: left 0.6s;
+    }
+
+    .edit-overlay button.secondary:hover::before {
+      left: 100%;
+    }
+
+    .edit-overlay button.secondary:hover {
+      transform: translateY(-3px) scale(1.05);
+      box-shadow: 0 8px 25px rgba(255, 107, 107, 0.4);
+      background: linear-gradient(135deg, #ff8a8a, #ff6b6b);
+    }
+
+    /* Ensure edit overlay content is clickable */
+    .edit-overlay * {
+      pointer-events: auto;
+    }
+
+    .edit-overlay button {
+      position: relative;
+      z-index: 2200;
+      pointer-events: auto;
+    }
+
+    /* Custom scrollbar for edit overlay */
+    .edit-overlay::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .edit-overlay::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+
+    .edit-overlay::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+    }
+
+    .edit-overlay::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
+
+    .edit-overlay input[type="file"] {
+      width: 100%;
+      padding: 10px;
+      border: 2px dashed #dee2e6;
+      border-radius: 8px;
+      background: #f8f9fa;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+
+    .edit-overlay input[type="file"]:hover {
+      border-color: #007bff;
+      background: #e3f2fd;
+    }
+
+    .edit-overlay input[type="text"],
+    .edit-overlay input[type="url"] {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e9ecef;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 15px;
+      transition: border-color 0.3s ease;
+    }
+
+    .edit-overlay input[type="text"]:focus,
+    .edit-overlay input[type="url"]:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+    }
+
+    .edit-options-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .edit-option {
+      padding: 20px;
+      border: 2px solid #e9ecef;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #ffffff, #f8f9fa);
+      cursor: pointer;
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      text-align: center;
+      font-weight: 600;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .edit-option::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+      transition: left 0.5s;
+    }
+
+    .edit-option:hover::before {
+      left: 100%;
+    }
+
+    .edit-option:hover {
+      border-color: #007bff;
+      background: linear-gradient(135deg, #f8f9ff, #e3f2fd);
+      transform: translateY(-4px) scale(1.02);
+      box-shadow: 0 8px 25px rgba(0, 123, 255, 0.2);
+    }
+
+    .edit-option.selected {
+      border-color: #007bff;
+      background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+      color: #007bff;
+      transform: scale(1.05);
+      box-shadow: 0 8px 25px rgba(0, 123, 255, 0.3);
+    }
+
+    /* Button hover effects */
+    #helpBtn:hover, #debugBtn:hover, #undoBtn:hover {
+      transform: translateY(-5px) scale(1.1);
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    #helpBtn:hover {
+      box-shadow: 0 15px 40px rgba(255, 107, 107, 0.6);
+      background: linear-gradient(135deg, #ff8a8a, #ff6b6b);
+      animation: pulse 2s infinite;
+      transform: translateY(-5px) scale(1.1) rotate(8deg);
+    }
+
+    #debugBtn:hover {
+      box-shadow: 0 15px 40px rgba(254, 202, 87, 0.6);
+      background: linear-gradient(135deg, #ffd93d, #ff9ff3);
+      animation: float 2s infinite;
+      transform: translateY(-5px) scale(1.1) rotate(-6deg);
+    }
+
+    #undoBtn:hover {
+      box-shadow: 0 15px 40px rgba(72, 219, 251, 0.6);
+      background: linear-gradient(135deg, #6ee7ff, #48dbfb);
+      animation: glow 2s infinite;
+      transform: translateY(-5px) scale(1.1) rotate(5deg);
+    }
+
+    #helpBtn:active, #debugBtn:active, #undoBtn:active {
+      transform: translateY(-3px) scale(0.95);
+    }
+
+    /* Shimmer effect for all buttons */
+    #helpBtn::before, #debugBtn::before, #undoBtn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+      transition: left 0.6s;
+      clip-path: polygon(20% 0%, 80% 0%, 100% 50%, 80% 100%, 20% 100%, 0% 50%);
+    }
+
+    #helpBtn:hover::before, #debugBtn:hover::before, #undoBtn:hover::before {
+      left: 100%;
+    }
+
+    /* Dormant button hover effect */
+    button[style*="linear-gradient(135deg, #a55eea"]:hover {
+      transform: translateY(-5px) scale(1.1) rotate(4deg);
+      box-shadow: 0 15px 40px rgba(165, 94, 234, 0.6);
+      background: linear-gradient(135deg, #b794f4, #a55eea) !important;
+      animation: pulse 2s infinite;
+    }
+
+    button[style*="linear-gradient(135deg, #a55eea"]:active {
+      transform: translateY(-3px) scale(0.95) rotate(-2deg);
+    }
+
     .dormant {
       display: none !important;
     }
+
     .dormant-revealed {
       display: inline-block !important;
       outline: 2px dotted #e67e22 !important;
@@ -42,421 +709,1679 @@
       opacity: 0.8;
       cursor: pointer;
     }
+
+    .editable-form-embed {
+      width: 100% !important;
+      height: 500px;
+      display: block;
+      border: none;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    .iframe-wrapper {
+      position: relative;
+      display: inline-block;
+      overflow: hidden;
+    }
+    
+    .iframe-overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: transparent;
+      z-index: 1000;
+      cursor: pointer;
+    }
   </style>
 </head>
+
 <body>
-<div id="editor"><iframe id="pageFrame"></iframe></div>
-<button id="commitBtn">💾 Commit Changes</button>
-<script>
-const USERNAME = 'will292929';
-const REPO = 'test5';
-let FILE_PATH = 'index.html';
-const BRANCH = 'main';
-let TOKEN = localStorage.getItem('github_token') || prompt('Enter GitHub Token:');
-if (TOKEN) localStorage.setItem('github_token', TOKEN);
+  <div id="editor">
+    <iframe id="pageFrame"></iframe>
+  </div>
+  <button id="commitBtn" style="position: fixed; bottom: 20px; right: 20px; width: 130px; height: 60px; z-index: 9999;">
+    <div class="spinner"></div>
+    💾 Commit Changes
+  </button>
+  <div id="statusBar" style="position: fixed; top: 10px; right: 10px; background: linear-gradient(135deg, rgba(0,0,0,0.9), rgba(0,0,0,0.8)); color: white; padding: 15px 20px; border-radius: 12px; font-size: 13px; z-index: 9999; display: none; backdrop-filter: blur(15px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); font-weight: 600; border: 1px solid rgba(255,255,255,0.1); animation: slideIn 0.4s ease-out;">Ready</div>
+  <div id="commitStatus" class="commit-status">
+    <div class="spinner"></div>
+    <h3>Committing Changes...</h3>
+    <p>Please wait 30-45 seconds to see changes on mainframe</p>
+  </div>
+  <button id="helpBtn" style="position: fixed; bottom: 340px; right: 20px; padding: 16px 20px; background: linear-gradient(135deg, #ff6b6b, #ee5a52); color: white; border: none; cursor: pointer; z-index: 9999; font-weight: 700; box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4); transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); width: 130px; height: 60px; backdrop-filter: blur(15px); border: 2px solid rgba(255, 255, 255, 0.3); animation: slideIn 0.6s ease-out 0.1s both; text-transform: uppercase; letter-spacing: 0.5px; overflow: hidden; clip-path: polygon(20% 0%, 80% 0%, 100% 50%, 80% 100%, 20% 100%, 0% 50%); transform: rotate(0deg);">❓ Help</button>
+  <button id="debugBtn" style="position: fixed; bottom: 260px; right: 20px; padding: 16px 20px; background: linear-gradient(135deg, #feca57, #ff9ff3); color: white; border: none; cursor: pointer; z-index: 9999; font-weight: 700; box-shadow: 0 10px 30px rgba(254, 202, 87, 0.4); transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); width: 130px; height: 60px; backdrop-filter: blur(15px); border: 2px solid rgba(255, 255, 255, 0.3); animation: slideIn 0.6s ease-out 0.2s both; text-transform: uppercase; letter-spacing: 0.5px; overflow: hidden; clip-path: polygon(20% 0%, 80% 0%, 100% 50%, 80% 100%, 20% 100%, 0% 50%); transform: rotate(0deg);">🐛 Debug</button>
+  <button id="undoBtn" style="position: fixed; bottom: 180px; right: 20px; padding: 16px 20px; background: linear-gradient(135deg, #48dbfb, #0abde3); color: white; border: none; cursor: pointer; z-index: 9999; font-weight: 700; box-shadow: 0 10px 30px rgba(72, 219, 251, 0.4); transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); width: 130px; height: 60px; backdrop-filter: blur(15px); border: 2px solid rgba(255, 255, 255, 0.3); animation: slideIn 0.6s ease-out 0.3s both; text-transform: uppercase; letter-spacing: 0.5px; overflow: hidden; clip-path: polygon(20% 0%, 80% 0%, 100% 50%, 80% 100%, 20% 100%, 0% 50%); transform: rotate(0deg);">↶ Undo</button>
+  
+  <!-- New automation elements -->
+  <div class="progress-bar"></div>
+  <div class="shortcuts-hint">
+    <strong>⌨️ Shortcuts:</strong><br>
+    Ctrl+S: Save | Ctrl+R: Reload | Ctrl+Z: Undo | Ctrl+Shift+A: Quick Actions
+  </div>
+  <div class="quick-actions" id="quickActions">
+    <h3>Quick Actions</h3>
+    <div id="actionsList"></div>
+  </div>
 
 
-const frame = document.getElementById('pageFrame');
-let spaceHeld = false, spaceJustUsed = false, sha = '';
-
-
-// Listen globally for spacebar mode
-window.addEventListener('keydown', e => {
-  if (e.code === 'Space' && !spaceHeld) {
-    spaceHeld = true;
-    spaceJustUsed = false;
-  }
-});
-window.addEventListener('keyup', e => {
-  if (e.code === 'Space') {
-    spaceHeld = false;
-    spaceJustUsed = false;
-  }
-});
-
-
-function attachAllHandlers(doc) {
-  // ✅ Clean up any previous wrappers
-  doc.querySelectorAll('.iframe-wrapper').forEach(wrapper => {
-    const iframe = wrapper.querySelector('iframe');
-    if (iframe) {
-      wrapper.parentNode.insertBefore(iframe, wrapper);
-      wrapper.remove();
+  <script>
+    const USERNAME = 'will292929';
+    const REPO = 'test5';
+    let FILE_PATH = 'index.html';
+    const BRANCH = 'main';
+    let TOKEN = localStorage.getItem('github_token') || prompt('Enter GitHub Token:');
+    if (TOKEN) localStorage.setItem('github_token', TOKEN);
+    
+    // Validate token format
+    if (TOKEN && !TOKEN.startsWith('ghp_') && !TOKEN.startsWith('github_pat_')) {
+      alert('⚠️ Invalid token format. Please use a GitHub Personal Access Token.');
+      TOKEN = prompt('Enter valid GitHub Token:');
+      if (TOKEN) localStorage.setItem('github_token', TOKEN);
     }
-  });
-
-  // ✅ Remove old handlers
-  doc.querySelectorAll('[data-editor-attached]').forEach(el => {
-    el.removeAttribute('data-editor-attached');
-    el.onclick = null;
-  });
-
-  const elements = doc.querySelectorAll('a,img,button,iframe,span,p,div,h1,h2,h3,h4,h5,h6,strong,b,em');
-
-  elements.forEach(el => {
-    const tag = el.tagName.toLowerCase();
-    const text = el.innerText?.trim();
-    const hasText = !!text;
-
-    // ❌ Skip dormant unless revealed
-    if (el.classList.contains('dormant') && !dormantVisible) return;
-
-    // ✅ Special iframe handling — add overlay wrapper only once
-    if (tag === 'iframe') {
-      if (!el.parentElement?.classList?.contains('iframe-wrapper')) {
-        const wrapper = doc.createElement('div');
-        wrapper.className = 'iframe-wrapper';
-        wrapper.style.position = 'relative';
-        wrapper.style.display = 'inline-block';
-        wrapper.style.width = el.offsetWidth + 'px';
-        wrapper.style.height = el.offsetHeight + 'px';
-
-        const overlay = doc.createElement('div');
-        overlay.className = 'iframe-overlay';
-        overlay.style.position = 'absolute';
-        overlay.style.top = 0;
-        overlay.style.left = 0;
-        overlay.style.width = '100%';
-        overlay.style.height = '100%';
-        overlay.style.background = 'transparent';
-        overlay.style.zIndex = 1000;
-        overlay.style.cursor = 'pointer';
-
-        el.parentNode.insertBefore(wrapper, el);
-        wrapper.appendChild(el);
-        wrapper.appendChild(overlay);
-
-        overlay.setAttribute('data-editor-attached', 'yes');
-        overlay.onclick = () => el.click();
+    
+    // History for undo functionality
+    let history = [];
+    let historyIndex = -1;
+    const MAX_HISTORY = 20;
+    let isUndoing = false; // Flag to prevent conflicts during undo
+    
+    // Initialize history when frame loads
+    function initializeHistory() {
+      const doc = frame.contentDocument || frame.contentWindow.document;
+      if (doc && doc.documentElement) {
+        const html = doc.documentElement.outerHTML;
+        history = [html];
+        historyIndex = 0;
+        const undoBtn = document.getElementById('undoBtn');
+        undoBtn.disabled = true;
+        console.log('🚀 History initialized. Index:', historyIndex, 'History length:', history.length);
+      } else {
+        console.log('❌ Could not initialize history - no document available');
       }
-      return; // skip the iframe itself
+    }
+    
+    // Status bar functionality
+    function showStatus(message, duration = 3000, type = 'info') {
+      const statusBar = document.getElementById('statusBar');
+      statusBar.textContent = message;
+      statusBar.style.display = 'block';
+      
+      // Add type-based styling
+      statusBar.className = `status-${type}`;
+      
+      if (duration > 0) {
+        setTimeout(() => {
+          statusBar.style.display = 'none';
+        }, duration);
+      }
     }
 
-    // ❌ Skip large containers (with multiple children or nested blocks)
-    const childTags = Array.from(el.children).map(c => c.tagName?.toLowerCase());
-    const isAtomic = childTags.length <= 1 && !childTags.some(t => ['p','div','section','h1','h2','h3','h4'].includes(t));
-    if (!['img', 'a', 'iframe', 'button'].includes(tag) && !isAtomic) return;
-
-    el.setAttribute('data-editor-attached', 'yes');
-
-    el.onclick = async e => {
-      const iframeSpaceHeld = doc._iframeSpaceHeld || false;
-      const fullSpaceHeld = spaceHeld || iframeSpaceHeld;
-
-      // 🔗 Identify editable attribute
-      let attr = null;
-      if (tag === 'a') attr = 'href';
-      else if (['img', 'iframe'].includes(tag)) attr = 'src';
-      else if (tag === 'button') {
-        if (el.hasAttribute('href')) attr = 'href';
-        else if (el.hasAttribute('data-link')) attr = 'data-link';
-        else if (el.hasAttribute('onclick')) attr = 'onclick';
-      }
-      else if (tag === 'div' && el.hasAttribute('src')) {
-        const innerA = el.querySelector('a');
-        if (innerA) {
-            attr = 'href';
-            el = innerA; // now edits will target the <a>
+    // Auto-save functionality
+    let autoSaveInterval;
+    let lastSavedState = '';
+    
+    function startAutoSave() {
+      autoSaveInterval = setInterval(() => {
+        const doc = frame.contentDocument || frame.contentWindow.document;
+        const currentState = doc.documentElement.outerHTML;
+        
+        if (currentState !== lastSavedState) {
+          lastSavedState = currentState;
+          showStatus('💾 Auto-saving...', 1000, 'info');
         }
+      }, 30000); // Auto-save every 30 seconds
+    }
+
+    function stopAutoSave() {
+      if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+      }
+    }
+
+    // Smart element detection
+    function detectElementType(el) {
+      const tag = el.tagName.toLowerCase();
+      const text = el.innerText?.trim();
+      const hasText = !!text;
+      const hasImage = el.querySelector('img') || tag === 'img';
+      const hasLink = el.querySelector('a') || tag === 'a';
+      
+      return {
+        type: hasImage ? 'image' : hasLink ? 'link' : hasText ? 'text' : 'container',
+        tag: tag,
+        hasText: hasText,
+        hasImage: hasImage,
+        hasLink: hasLink
+      };
+    }
+
+    // Smart suggestions
+    function getSmartSuggestions(el) {
+      const detection = detectElementType(el);
+      const suggestions = [];
+      
+      switch (detection.type) {
+        case 'image':
+          suggestions.push('browse', 'style', 'copy', 'delete');
+          break;
+        case 'link':
+          suggestions.push('url', 'text', 'style', 'copy', 'delete');
+          break;
+        case 'text':
+          suggestions.push('text', 'style', 'copy', 'delete');
+          break;
+        default:
+          suggestions.push('text', 'style', 'googleform', 'youtube', 'copy', 'delete');
+      }
+      
+      return suggestions;
+    }
+
+
+    const frame = document.getElementById('pageFrame');
+    let spaceHeld = false, spaceJustUsed = false, sha = '';
+
+
+    // Listen globally for spacebar mode
+    window.addEventListener('keydown', e => {
+      if (e.code === 'Space' && !spaceHeld) {
+        spaceHeld = true;
+        spaceJustUsed = false;
+      }
+      
+      // Ctrl+S to commit
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        commitBtn.click();
+        showStatus('💾 Saved!', 2000, 'success');
+      }
+      
+      // Ctrl+R to reload
+      if (e.ctrlKey && e.key === 'r') {
+        e.preventDefault();
+        loadHTML();
+        showStatus('🔄 Reloaded!', 2000, 'info');
+      }
+      
+      // Ctrl+Z to undo
+      if (e.ctrlKey && e.key === 'z') {
+        e.preventDefault();
+        document.getElementById('undoBtn').click();
+        showStatus('↶ Undone!', 2000, 'info');
       }
 
+      // Ctrl+Shift+A for quick actions
+      if (e.ctrlKey && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        showQuickActions();
+      }
 
-      // ⌨️ Spacebar link follow behavior
-      if (fullSpaceHeld && !spaceJustUsed) {
-        spaceJustUsed = true;
-        if (attr && el.getAttribute(attr)) {
-          window.open(el.getAttribute(attr), '_blank');
+      // Escape to close modals
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.edit-overlay, .quick-actions').forEach(el => el.remove());
+        document.querySelectorAll('.edit-backdrop').forEach(el => el.remove());
+      }
+    });
+    window.addEventListener('keyup', e => {
+      if (e.code === 'Space') {
+        spaceHeld = false;
+        spaceJustUsed = false;
+      }
+    });
+
+    // Quick actions functions
+    function showQuickActions() {
+      const actionsList = document.getElementById('actionsList');
+      actionsList.innerHTML = '';
+      
+      const actions = [
+        { icon: '💾', text: 'Save Changes', action: () => commitBtn.click() },
+        { icon: '🔄', text: 'Reload Page', action: () => loadHTML() },
+        { icon: '↶', text: 'Undo Last Change', action: () => document.getElementById('undoBtn').click() },
+        { icon: '👁️', text: 'Toggle Dormant Elements', action: () => dormantBtn.click() },
+        { icon: '📋', text: 'Copy Page URL', action: () => copyPageUrl() },
+        { icon: '🎨', text: 'Toggle Dark Mode', action: () => toggleDarkMode() },
+        { icon: '📊', text: 'Page Statistics', action: () => showPageStats() },
+        { icon: '🧹', text: 'Clean Up Page', action: () => cleanUpPage() },
+        { icon: '🐛', text: 'Test History Save', action: () => {
+          console.log('🧪 Manually testing history save...');
+          saveToHistory();
+          showStatus('🧪 History save tested!', 2000, 'info');
+        }},
+        { icon: '🔍', text: 'Debug History', action: () => {
+          console.log('🔍 History Debug:');
+          console.log('History array:', history);
+          console.log('History index:', historyIndex);
+          console.log('History length:', history.length);
+          console.log('Undo button disabled:', document.getElementById('undoBtn').disabled);
+          showStatus('🔍 History debug info logged!', 2000, 'info');
+        }},
+        { icon: '🧪', text: 'Test Undo', action: () => {
+          const doc = frame.contentDocument || frame.contentWindow.document;
+          const testElement = doc.querySelector('h1') || doc.querySelector('p') || doc.querySelector('div');
+          if (testElement) {
+            testElement.style.backgroundColor = 'red';
+            saveToHistory();
+            showStatus('🧪 Test change made! Try undo now.', 3000, 'info');
+          } else {
+            showStatus('❌ No element found to test', 2000, 'warning');
+          }
+        }},
+        { icon: '💾', text: 'Force Save History', action: () => {
+          saveToHistory();
+          showStatus('💾 History manually saved!', 2000, 'success');
+        }},
+        { icon: '🔄', text: 'Reload & Reset', action: () => {
+          if (confirm('This will reload the page and reset all changes. Continue?')) {
+            loadHTML();
+            history = [];
+            historyIndex = -1;
+            document.getElementById('undoBtn').disabled = true;
+            showStatus('🔄 Page reloaded and history reset!', 3000, 'info');
+          }
+        }}
+      ];
+      
+      actions.forEach(action => {
+        const item = document.createElement('div');
+        item.className = 'action-item';
+        item.innerHTML = `
+          <span class="icon">${action.icon}</span>
+          <span>${action.text}</span>
+        `;
+        item.onclick = () => {
+          document.getElementById('quickActions').style.display = 'none';
+          action.action();
+        };
+        actionsList.appendChild(item);
+      });
+      
+      document.getElementById('quickActions').style.display = 'block';
+    }
+
+    function copyPageUrl() {
+      const url = `https://${USERNAME}.github.io/${REPO}/`;
+      navigator.clipboard.writeText(url).then(() => {
+        showStatus('📋 URL copied to clipboard!', 2000, 'success');
+      });
+    }
+
+    function toggleDarkMode() {
+      const body = document.body;
+      body.classList.toggle('dark-mode');
+      const isDark = body.classList.contains('dark-mode');
+      showStatus(`🌙 ${isDark ? 'Dark' : 'Light'} mode ${isDark ? 'enabled' : 'disabled'}!`, 2000, 'info');
+    }
+
+    function showPageStats() {
+      const doc = frame.contentDocument || frame.contentWindow.document;
+      const images = doc.querySelectorAll('img').length;
+      const links = doc.querySelectorAll('a').length;
+      const textElements = doc.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span').length;
+      const forms = doc.querySelectorAll('form, iframe').length;
+      
+      alert(`📊 Page Statistics:
+      
+🖼️ Images: ${images}
+🔗 Links: ${links}
+📝 Text Elements: ${textElements}
+📋 Forms/Embeds: ${forms}
+📄 Total Elements: ${images + links + textElements + forms}`);
+    }
+
+    function cleanUpPage() {
+      const doc = frame.contentDocument || frame.contentWindow.document;
+      const dormantElements = doc.querySelectorAll('.dormant');
+      
+      if (dormantElements.length > 0) {
+        if (confirm(`🧹 Clean up ${dormantElements.length} dormant elements?`)) {
+          dormantElements.forEach(el => el.remove());
+          showStatus(`🧹 Cleaned up ${dormantElements.length} elements!`, 3000, 'success');
+          setTimeout(() => attachAllHandlers(doc), 100);
         }
+      } else {
+        showStatus('✨ Page is already clean!', 2000, 'info');
+      }
+    }
+
+    // Bulk styling functions
+    function setupBulkStylingButtons(overlay, currentEl, doc) {
+      const applyToSameBgColor = overlay.querySelector('#applyToSameBgColor');
+      const applyToSameTextColor = overlay.querySelector('#applyToSameTextColor');
+      const applyToSameTag = overlay.querySelector('#applyToSameTag');
+      
+      applyToSameBgColor.onclick = () => {
+        const currentBgColor = window.getComputedStyle(currentEl).backgroundColor;
+        const similarElements = findElementsWithSameBackground(doc, currentBgColor);
+        showBulkStylingConfirmation(similarElements, 'background color', () => {
+          applyBulkStyling(similarElements, 'background');
+        });
+      };
+      
+      applyToSameTextColor.onclick = () => {
+        const currentTextColor = window.getComputedStyle(currentEl).color;
+        const similarElements = findElementsWithSameTextColor(doc, currentTextColor);
+        showBulkStylingConfirmation(similarElements, 'text color', () => {
+          applyBulkStyling(similarElements, 'text');
+        });
+      };
+      
+      applyToSameTag.onclick = () => {
+        const currentTag = currentEl.tagName.toLowerCase();
+        const similarElements = findElementsWithSameTag(doc, currentTag);
+        showBulkStylingConfirmation(similarElements, 'tag type', () => {
+          applyBulkStyling(similarElements, 'tag');
+        });
+      };
+    }
+
+    function findElementsWithSameBackground(doc, targetColor) {
+      const elements = doc.querySelectorAll('*');
+      const similarElements = [];
+      
+      elements.forEach(el => {
+        const bgColor = window.getComputedStyle(el).backgroundColor;
+        if (bgColor === targetColor && el !== doc.body && el !== doc.documentElement) {
+          similarElements.push(el);
+        }
+      });
+      
+      return similarElements;
+    }
+
+    function findElementsWithSameTextColor(doc, targetColor) {
+      const elements = doc.querySelectorAll('*');
+      const similarElements = [];
+      
+      elements.forEach(el => {
+        const textColor = window.getComputedStyle(el).color;
+        if (textColor === targetColor && el !== doc.body && el !== doc.documentElement) {
+          similarElements.push(el);
+        }
+      });
+      
+      return similarElements;
+    }
+
+    function findElementsWithSameTag(doc, targetTag) {
+      return Array.from(doc.querySelectorAll(targetTag));
+    }
+
+    function showBulkStylingConfirmation(elements, type, onConfirm) {
+      if (elements.length === 0) {
+        showStatus(`❌ No elements found with the same ${type}`, 3000, 'warning');
         return;
       }
-      if (fullSpaceHeld) return;
+      
+      const count = elements.length;
+      const message = `🎨 Apply styling to ${count} element${count > 1 ? 's' : ''} with the same ${type}?`;
+      
+      if (confirm(message)) {
+        onConfirm();
+        showStatus(`✅ Applied styling to ${count} element${count > 1 ? 's' : ''}!`, 3000, 'success');
+      }
+    }
 
-      e.preventDefault();
-      document.querySelectorAll('.edit-backdrop, .edit-overlay').forEach(x => x.remove());
+    function applyBulkStyling(elements, type) {
+      const overlay = document.querySelector('.edit-overlay');
+      const bgColorInput = overlay.querySelector('#bgColorInput');
+      const textColorInput = overlay.querySelector('#textColorInput');
+      const fontSizeInput = overlay.querySelector('#fontSizeInput');
+      
+      elements.forEach(el => {
+        if (bgColorInput.value && (type === 'background' || type === 'tag')) {
+          el.style.backgroundColor = bgColorInput.value;
+        }
+        if (textColorInput.value && (type === 'text' || type === 'tag')) {
+          el.style.color = textColorInput.value;
+        }
+        if (fontSizeInput.value && type === 'tag') {
+          el.style.fontSize = fontSizeInput.value;
+        }
+      });
+      
+      // Reattach handlers after styling
+      setTimeout(() => {
+        attachAllHandlers(frame.contentDocument || frame.contentWindow.document);
+        saveToHistory();
+      }, 100);
+    }
 
-      // 🧠 Build overlay
-      const overlay = document.createElement('div');
-      overlay.className = 'edit-overlay';
-      const backdrop = document.createElement('div');
-      backdrop.className = 'edit-backdrop';
+    function showProgress(progress) {
+      const progressBar = document.querySelector('.progress-bar');
+      progressBar.style.width = `${progress}%`;
+      
+      if (progress >= 100) {
+        setTimeout(() => {
+          progressBar.style.width = '0%';
+        }, 1000);
+      }
+    }
 
-      overlay.innerHTML = `
-        <label>Edit Element:</label>
-        <select id="editChoice">
-          <option value="">Cancel</option>
-          <option value="url">URL</option>
-          <option value="text">Text</option>
-          <option value="browse">Browse & Upload Image</option>
-          <option value="dormant">Make Dormant</option>
-          ${(el.classList.contains('dormant') || el.classList.contains('dormant-revealed')) ? '<option value="restore">Restore</option>' : ''}
-        </select>
-        <button id="editOk">OK</button>
-        <input type="file" id="imgInput" accept="image/*" style="display:none;margin-top:10px;" />
+
+
+    // Help button functionality
+    document.getElementById('helpBtn').onclick = () => {
+      alert(`🎯 Visual GitHub Pages Editor Help
+
+📝 How to use:
+• Click any element to edit it
+• Hold SPACEBAR + click to follow links
+• Use Ctrl+S to commit changes
+• Use Ctrl+R to reload the page
+• Use Ctrl+Z to undo changes
+• Use Ctrl+Shift+A for quick actions
+• Use Escape to close modals
+
+🔧 Edit options:
+• URL: Change links and image sources
+• Text: Edit text content
+• Browse & Upload: Upload new images
+• Styling: Change colors and fonts
+• Embed Google Form: Add form embeds
+• Embed YouTube Video: Add video embeds
+• Copy Element: Duplicate any element
+• Delete Element: Remove elements
+
+🚀 Enhanced Features:
+• Auto-save every 30 seconds
+• Smart element detection
+• Progress indicators
+• Enhanced status messages
+• Dark mode support
+• Page statistics
+• Quick cleanup tools
+• Keyboard shortcuts
+
+👁️ Dormant elements:
+• Click "Show Dormant" to see hidden elements
+• Hidden elements are marked with orange outline
+• Click "Restore" to bring them back
+
+💾 Committing:
+• Changes are saved to your GitHub repository
+• Images are uploaded to /images/ folder
+• Dormant elements are hidden in the final page
+
+🎬 Supported embeds:
+• Google Forms (any form URL)
+• YouTube videos (any YouTube URL)`);
+    };
+
+    // Debug button functionality
+    document.getElementById('debugBtn').onclick = () => {
+      const doc = frame.contentDocument || frame.contentWindow.document;
+      console.log('=== DEBUG INFO ===');
+      console.log('All iframes:', doc.querySelectorAll('iframe'));
+      console.log('Raw iframes (no data-embed-id):', doc.querySelectorAll('iframe:not([data-embed-id])'));
+      console.log('Editable form embeds:', doc.querySelectorAll('iframe.editable-form-embed'));
+      console.log('Iframe wrappers:', doc.querySelectorAll('.iframe-wrapper'));
+      
+      // Show iframe details
+      doc.querySelectorAll('iframe').forEach((iframe, index) => {
+        const embedId = iframe.getAttribute('data-embed-id');
+        console.log(`Iframe ${index + 1}:`, {
+          src: iframe.src,
+          embedId: embedId,
+          classes: iframe.className
+        });
+      });
+      
+      // Show history debug info
+      console.log('=== HISTORY DEBUG ===');
+      console.log('History array length:', history.length);
+      console.log('History index:', historyIndex);
+      console.log('History contents:', history);
+      console.log('Undo button disabled:', document.getElementById('undoBtn').disabled);
+      
+      // Manually trigger iframe upgrade
+      console.log('Manually upgrading iframes...');
+      upgradeAllIframes(doc);
+      attachAllHandlers(doc);
+      console.log('Manual upgrade complete');
+      
+      alert('Debug info logged to console. Check browser developer tools.');
+    };
+
+
+
+
+
+
+
+
+
+    // Undo functionality
+    function saveToHistory() {
+      const doc = frame.contentDocument || frame.contentWindow.document;
+      if (!doc || !doc.documentElement) {
+        console.log('❌ No document available for history save');
+        return;
+      }
+      
+      const html = doc.documentElement.outerHTML;
+      console.log('💾 Saving to history. Current index:', historyIndex, 'History length:', history.length);
+      
+      // Remove current state and everything after it
+      history = history.slice(0, historyIndex + 1);
+      
+      // Add new state
+      history.push(html);
+      historyIndex++;
+      
+      // Limit history size
+      if (history.length > MAX_HISTORY) {
+        history.shift();
+        historyIndex--;
+      }
+      
+      // Update undo button state
+      const undoBtn = document.getElementById('undoBtn');
+      undoBtn.disabled = historyIndex <= 0;
+      
+      console.log('✅ History saved. New index:', historyIndex, 'History length:', history.length, 'Button disabled:', undoBtn.disabled);
+      
+      // Add fancy visual feedback
+      undoBtn.style.transform = 'scale(1.1)';
+      undoBtn.style.boxShadow = '0 8px 25px rgba(108, 117, 125, 0.4)';
+      setTimeout(() => {
+        undoBtn.style.transform = '';
+        undoBtn.style.boxShadow = '';
+      }, 300);
+    }
+
+    document.getElementById('undoBtn').onclick = () => {
+      if (isUndoing) {
+        showStatus('⏳ Undo in progress...', 2000, 'warning');
+        return;
+      }
+      
+      console.log('🔄 Undo clicked! History index:', historyIndex, 'History length:', history.length);
+      
+      if (historyIndex > 0) {
+        isUndoing = true;
+        historyIndex--;
+        console.log('📋 Restoring to history index:', historyIndex);
+        
+        try {
+          // Store the HTML we're about to restore
+          const htmlToRestore = history[historyIndex];
+          if (!htmlToRestore) {
+            throw new Error('No HTML content in history at index ' + historyIndex);
+          }
+          console.log('📄 HTML length to restore:', htmlToRestore.length);
+          
+          // Show loading state
+          showStatus('🔄 Restoring previous state...', 0, 'info');
+          
+          // Create a temporary iframe to test the content
+          const tempFrame = document.createElement('iframe');
+          tempFrame.style.display = 'none';
+          tempFrame.srcdoc = htmlToRestore;
+          
+          tempFrame.onload = () => {
+            try {
+              // If the temp frame loads successfully, apply to main frame
+              frame.srcdoc = htmlToRestore;
+              
+              // Wait for the main frame to load
+              frame.onload = () => {
+                const doc = frame.contentDocument || frame.contentWindow.document;
+                if (doc) {
+                  // Reattach handlers
+                  attachAllHandlers(doc);
+                  showDormantElements(dormantVisible);
+                  
+                  // Update button state
+                  const undoBtn = document.getElementById('undoBtn');
+                  undoBtn.disabled = historyIndex <= 0;
+                  
+                  console.log('✅ Undo completed successfully');
+                  showStatus('↶ Undone!', 2000, 'info');
+                  isUndoing = false;
+                }
+              };
+            } catch (error) {
+              console.error('❌ Error applying undo:', error);
+              showStatus('❌ Undo failed: ' + error.message, 3000, 'error');
+              isUndoing = false;
+            }
+          };
+          
+          tempFrame.onerror = () => {
+            console.error('❌ Error loading temp frame');
+            showStatus('❌ Undo failed: Invalid content', 3000, 'error');
+            isUndoing = false;
+          };
+          
+        } catch (error) {
+          console.error('❌ Error during undo:', error);
+          showStatus('❌ Undo failed: ' + error.message, 3000, 'error');
+          isUndoing = false;
+        }
+      } else {
+        console.log('❌ Nothing to undo - history index is 0');
+        showStatus('❌ Nothing to undo', 2000, 'warning');
+      }
+    };
+
+
+
+    loadHTML();
+
+
+
+    function insertEditableEmbed(container, embedUrl, width = "100%", height = "500px") {
+      const doc = container.ownerDocument || document;
+
+      console.log('Creating embed:', { embedUrl, width, height, container: container.tagName });
+
+      // Clear the container completely if it's empty or only has whitespace
+      if (!container.innerHTML.trim()) {
+        container.innerHTML = '';
+      } else {
+        // Remove any existing iframes in the container
+        const existingElements = container.querySelectorAll('iframe');
+        console.log(`Removing ${existingElements.length} existing iframes from container`);
+        Array.from(existingElements).forEach(el => el.remove());
+      }
+
+      // Create a wrapper div to hold the iframe and edit button
+      const wrapper = doc.createElement('div');
+      wrapper.style.position = 'relative';
+      wrapper.style.display = 'inline-block';
+      wrapper.style.width = width;
+      wrapper.style.height = height;
+      wrapper.style.maxWidth = '100%';
+
+      // Create a simple, clean iframe
+      const iframe = doc.createElement('iframe');
+      iframe.src = embedUrl;
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.border = "none";
+      iframe.style.display = "block";
+      iframe.style.margin = "0";
+      iframe.style.boxSizing = "border-box";
+      
+      // Create a small edit button that appears in the top-right corner
+      const editButton = doc.createElement('button');
+      editButton.innerHTML = '✏️';
+      editButton.style.position = 'absolute';
+      editButton.style.top = '5px';
+      editButton.style.right = '5px';
+      editButton.style.zIndex = '1000';
+      editButton.style.background = '#007bff';
+      editButton.style.color = 'white';
+      editButton.style.border = 'none';
+      editButton.style.borderRadius = '3px';
+      editButton.style.padding = '3px 6px';
+      editButton.style.fontSize = '12px';
+      editButton.style.cursor = 'pointer';
+      editButton.style.opacity = '0';
+      editButton.style.transition = 'opacity 0.2s ease';
+      
+      // Show button on hover
+      wrapper.onmouseenter = () => {
+        editButton.style.opacity = '1';
+      };
+      
+      wrapper.onmouseleave = () => {
+        editButton.style.opacity = '0';
+      };
+      
+      // Add click handler to the edit button
+      editButton.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Show edit options
+        doc.querySelectorAll('.edit-backdrop, .edit-overlay').forEach(x => x.remove());
+
+        const overlayBox = doc.createElement('div');
+        overlayBox.className = 'edit-overlay';
+        const backdrop = doc.createElement('div');
+        backdrop.className = 'edit-backdrop';
+
+        overlayBox.innerHTML = `
+          <label>Edit Embed:</label>
+          <select id="editChoice">
+            <option value="">Cancel</option>
+            <option value="remove">Remove Embed</option>
+          </select>
+          <button id="editOk">OK</button>
+        `;
+
+        doc.body.append(backdrop, overlayBox);
+
+        backdrop.onclick = () => {
+          overlayBox.remove();
+          backdrop.remove();
+        };
+
+        doc.getElementById('editOk').onclick = () => {
+          const choice = doc.getElementById('editChoice').value;
+          overlayBox.remove();
+          backdrop.remove();
+
+          if (choice === 'remove') {
+            wrapper.remove();
+            setTimeout(() => attachAllHandlers(doc), 0);
+          }
+        };
+      };
+
+      wrapper.appendChild(iframe);
+      wrapper.appendChild(editButton);
+      container.appendChild(wrapper);
+    }
+    function upgradeAllIframes(doc) {
+      console.log('=== Starting iframe upgrade process ===');
+      
+      // First, clean any existing iframes that might have old editor attributes
+      const existingIframes = doc.querySelectorAll('iframe');
+      existingIframes.forEach(iframe => {
+        // Remove any old editor attributes
+        iframe.removeAttribute('data-embed-id');
+        iframe.removeAttribute('data-editor-attached');
+        iframe.classList.remove('editable-form-embed', 'editable-embed');
+        
+        // Clean up any old styles
+        iframe.style.outline = '';
+        iframe.style.transition = '';
+        iframe.style.zIndex = '';
+        iframe.style.pointerEvents = '';
+      });
+      
+      // Find all iframes that need to be made editable
+      const iframes = doc.querySelectorAll('iframe:not([data-editor-attached])');
+      console.log(`Found ${iframes.length} iframes to make editable`);
+      
+      iframes.forEach((iframe, index) => {
+        const src = iframe.src || '';
+        const parent = iframe.parentElement;
+        
+        // Get dimensions, preferring inline styles over attributes
+        let width = iframe.style.width || iframe.getAttribute('width') || "100%";
+        let height = iframe.style.height || iframe.getAttribute('height') || "500px";
+        
+        // Clean up dimension values
+        if (width === 'medium' || width === '') width = "100%";
+        if (height === 'medium' || height === '') height = "500px";
+        
+        console.log(`Making iframe ${index + 1} editable:`, { src, width, height });
+        
+        // Create a wrapper for this iframe
+        const wrapper = doc.createElement('div');
+        wrapper.style.position = 'relative';
+        wrapper.style.display = 'inline-block';
+        wrapper.style.width = width;
+        wrapper.style.height = height;
+        wrapper.style.maxWidth = '100%';
+        
+        // Apply proper styling to iframe
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = "none";
+        iframe.style.display = "block";
+        iframe.style.margin = "0";
+        iframe.style.boxSizing = "border-box";
+        
+        // Create edit button
+        const editButton = doc.createElement('button');
+        editButton.innerHTML = '✏️';
+        editButton.style.position = 'absolute';
+        editButton.style.top = '5px';
+        editButton.style.right = '5px';
+        editButton.style.zIndex = '1000';
+        editButton.style.background = '#007bff';
+        editButton.style.color = 'white';
+        editButton.style.border = 'none';
+        editButton.style.borderRadius = '3px';
+        editButton.style.padding = '3px 6px';
+        editButton.style.fontSize = '12px';
+        editButton.style.cursor = 'pointer';
+        editButton.style.opacity = '0';
+        editButton.style.transition = 'opacity 0.2s ease';
+        
+        // Show button on hover
+        wrapper.onmouseenter = () => {
+          editButton.style.opacity = '1';
+        };
+        
+        wrapper.onmouseleave = () => {
+          editButton.style.opacity = '0';
+        };
+        
+        // Add click handler to the edit button
+        editButton.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          doc.querySelectorAll('.edit-backdrop, .edit-overlay').forEach(x => x.remove());
+
+          const overlayBox = doc.createElement('div');
+          overlayBox.className = 'edit-overlay';
+          const backdrop = doc.createElement('div');
+          backdrop.className = 'edit-backdrop';
+
+          overlayBox.innerHTML = `
+            <label>Edit Embed:</label>
+            <select id="editChoice">
+              <option value="">Cancel</option>
+              <option value="remove">Remove Embed</option>
+            </select>
+            <button id="editOk">OK</button>
+          `;
+
+          doc.body.append(backdrop, overlayBox);
+
+          backdrop.onclick = () => {
+            overlayBox.remove();
+            backdrop.remove();
+          };
+
+          doc.getElementById('editOk').onclick = () => {
+            const choice = doc.getElementById('editChoice').value;
+            overlayBox.remove();
+            backdrop.remove();
+
+            if (choice === 'remove') {
+              wrapper.remove();
+              setTimeout(() => attachAllHandlers(doc), 0);
+            }
+          };
+        };
+        
+        // Move iframe into wrapper
+        parent.insertBefore(wrapper, iframe);
+        wrapper.appendChild(iframe);
+        wrapper.appendChild(editButton);
+      });
+      
+      console.log('=== Iframe upgrade complete ===');
+    }
+
+
+
+  
+    function attachAllHandlers(doc) {
+      // ✅ First, upgrade any raw iframes to be editable
+      upgradeAllIframes(doc);
+
+      // ✅ Remove old handlers
+      doc.querySelectorAll('[data-editor-attached]').forEach(el => {
+        el.removeAttribute('data-editor-attached');
+        el.onclick = null;
+      });
+
+      const elements = doc.querySelectorAll('a,img,button,iframe,span,p,div,h1,h2,h3,h4,h5,h6,strong,b,em');
+
+      elements.forEach(el => {
+        const tag = el.tagName.toLowerCase();
+        const text = el.innerText?.trim();
+        const hasText = !!text;
+
+        // ❌ Skip dormant unless revealed
+        if (el.classList.contains('dormant') && !dormantVisible) return;
+
+
+
+
+
+
+        // ❌ Skip large containers (with multiple children or nested blocks)
+        const childTags = Array.from(el.children).map(c => c.tagName?.toLowerCase());
+        const isAtomic = childTags.length <= 1 && !childTags.some(t => ['p', 'div', 'section', 'h1', 'h2', 'h3', 'h4'].includes(t));
+        if (!['img', 'a', 'iframe', 'button'].includes(tag) && !isAtomic) return;
+
+        el.setAttribute('data-editor-attached', 'yes');
+
+        el.onclick = async e => {
+          const iframeSpaceHeld = doc._iframeSpaceHeld || false;
+          const fullSpaceHeld = spaceHeld || iframeSpaceHeld;
+
+          // Smart element detection and feedback
+          const detection = detectElementType(el);
+          showStatus(`🎯 Editing ${detection.type}: ${el.innerText?.trim().substring(0, 20) || el.tagName}`, 2000, 'info');
+
+          // 🔗 Identify editable attribute
+          let attr = null;
+          if (tag === 'a') attr = 'href';
+          else if (['img', 'iframe'].includes(tag)) attr = 'src';
+          else if (tag === 'button') {
+            if (el.hasAttribute('href')) attr = 'href';
+            else if (el.hasAttribute('data-link')) attr = 'data-link';
+            else if (el.hasAttribute('onclick')) attr = 'onclick';
+          }
+          else if (tag === 'div' && el.hasAttribute('src')) {
+            const innerA = el.querySelector('a');
+            if (innerA) {
+              attr = 'href';
+              el = innerA; // now edits will target the <a>
+            }
+          }
+
+
+          // ⌨️ Spacebar link follow behavior
+          if (fullSpaceHeld && !spaceJustUsed) {
+            spaceJustUsed = true;
+            if (attr && el.getAttribute(attr)) {
+              window.open(el.getAttribute(attr), '_blank');
+            }
+            return;
+          }
+          if (fullSpaceHeld) return;
+
+          e.preventDefault();
+          document.querySelectorAll('.edit-backdrop, .edit-overlay').forEach(x => x.remove());
+
+          // 🧠 Build overlay
+          const overlay = document.createElement('div');
+          overlay.className = 'edit-overlay';
+          const backdrop = document.createElement('div');
+          backdrop.className = 'edit-backdrop';
+
+          overlay.innerHTML = `
+        <h3>Edit Element</h3>
+        <div class="edit-options-grid">
+          <div class="edit-option" data-value="url">
+            <div style="font-size: 24px; margin-bottom: 8px;">🔗</div>
+            <div>URL/Link</div>
+          </div>
+          <div class="edit-option" data-value="text">
+            <div style="font-size: 24px; margin-bottom: 8px;">📝</div>
+            <div>Text Content</div>
+          </div>
+          <div class="edit-option" data-value="browse">
+            <div style="font-size: 24px; margin-bottom: 8px;">🖼️</div>
+            <div>Upload Image</div>
+          </div>
+          <div class="edit-option" data-value="style">
+            <div style="font-size: 24px; margin-bottom: 8px;">🎨</div>
+            <div>Styling</div>
+          </div>
+          <div class="edit-option" data-value="googleform">
+            <div style="font-size: 24px; margin-bottom: 8px;">📋</div>
+            <div>Google Form</div>
+          </div>
+          <div class="edit-option" data-value="youtube">
+            <div style="font-size: 24px; margin-bottom: 8px;">🎬</div>
+            <div>YouTube Video</div>
+          </div>
+          <div class="edit-option" data-value="copy">
+            <div style="font-size: 24px; margin-bottom: 8px;">📋</div>
+            <div>Copy Element</div>
+          </div>
+          <div class="edit-option" data-value="dormant">
+            <div style="font-size: 24px; margin-bottom: 8px;">👁️</div>
+            <div>Hide Element</div>
+          </div>
+          ${(el.classList.contains('dormant') || el.classList.contains('dormant-revealed')) ? 
+            '<div class="edit-option" data-value="restore"><div style="font-size: 24px; margin-bottom: 8px;">🔄</div><div>Restore</div></div>' : ''}
+          <div class="edit-option" data-value="delete">
+            <div style="font-size: 24px; margin-bottom: 8px;">🗑️</div>
+            <div>Delete</div>
+          </div>
+        </div>
+        
+        <div id="editDetails" style="display: none;">
+          <div id="urlEdit" style="display: none;">
+            <label>URL/Link:</label>
+            <input type="url" id="urlInput" placeholder="Enter URL...">
+          </div>
+          <div id="textEdit" style="display: none;">
+            <label>Text Content:</label>
+            <textarea id="textInput" rows="3" placeholder="Enter text..." style="width: 100%; padding: 12px 16px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 14px; margin-bottom: 15px; resize: vertical;"></textarea>
+          </div>
+          <div id="styleEdit" style="display: none;">
+            <label>Background Color:</label>
+            <input type="color" id="bgColorInput" style="width: 100%; height: 40px; border: 2px solid #e9ecef; border-radius: 8px; margin-bottom: 15px;">
+            <label>Text Color:</label>
+            <input type="color" id="textColorInput" style="width: 100%; height: 40px; border: 2px solid #e9ecef; border-radius: 8px; margin-bottom: 15px;">
+            <label>Font Size:</label>
+            <select id="fontSizeInput" style="width: 100%; padding: 12px 16px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 14px; margin-bottom: 15px;">
+              <option value="">Keep current</option>
+              <option value="12px">Small (12px)</option>
+              <option value="14px">Normal (14px)</option>
+              <option value="16px">Medium (16px)</option>
+              <option value="18px">Large (18px)</option>
+              <option value="24px">Extra Large (24px)</option>
+              <option value="32px">Huge (32px)</option>
+            </select>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #007bff;">
+              <label style="font-weight: 600; color: #007bff; margin-bottom: 10px; display: block;">🎨 Apply to Similar Elements:</label>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button type="button" id="applyToSameBgColor" style="padding: 8px 12px; background: #e3f2fd; border: 1px solid #007bff; border-radius: 6px; color: #007bff; cursor: pointer; font-size: 12px; transition: all 0.3s ease;">Same Background</button>
+                <button type="button" id="applyToSameTextColor" style="padding: 8px 12px; background: #e3f2fd; border: 1px solid #007bff; border-radius: 6px; color: #007bff; cursor: pointer; font-size: 12px; transition: all 0.3s ease;">Same Text Color</button>
+                <button type="button" id="applyToSameTag" style="padding: 8px 12px; background: #e3f2fd; border: 1px solid #007bff; border-radius: 6px; color: #007bff; cursor: pointer; font-size: 12px; transition: all 0.3s ease;">Same Tag Type</button>
+              </div>
+              <div style="margin-top: 10px; font-size: 11px; color: #666;">
+                💡 Select one of these options to apply your changes to all similar elements
+              </div>
+            </div>
+          </div>
+          <div id="imageEdit" style="display: none;">
+            <label>Upload New Image:</label>
+            <input type="file" id="imgInput" accept="image/*" style="width: 100%; padding: 10px; border: 2px dashed #dee2e6; border-radius: 8px; background: #f8f9fa; margin-top: 10px; cursor: pointer;">
+            <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+              <label>Or enter image URL:</label>
+              <input type="url" id="imageUrlInput" placeholder="https://example.com/image.jpg" style="width: 100%; padding: 12px 16px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 14px; margin-top: 8px;">
+            </div>
+          </div>
+          <div id="googleFormEdit" style="display: none;">
+            <label>Google Form URL:</label>
+            <input type="url" id="googleFormUrlInput" placeholder="https://docs.google.com/forms/d/e/..." style="width: 100%; padding: 12px 16px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 14px; margin-bottom: 15px;">
+            <div style="padding: 10px; background: #e3f2fd; border-radius: 8px; font-size: 12px; color: #1976d2;">
+              💡 Tip: Paste your Google Form URL and it will be automatically embedded
+            </div>
+          </div>
+          <div id="youtubeEdit" style="display: none;">
+            <label>YouTube Video URL:</label>
+            <input type="url" id="youtubeUrlInput" placeholder="https://www.youtube.com/watch?v=..." style="width: 100%; padding: 12px 16px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 14px; margin-bottom: 15px;">
+            <div style="padding: 10px; background: #fff3e0; border-radius: 8px; font-size: 12px; color: #f57c00;">
+              💡 Tip: Paste any YouTube video URL and it will be automatically embedded
+            </div>
+          </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px; position: sticky; bottom: 0; background: linear-gradient(135deg, #ffffff, #f8f9fa); padding: 15px 0; border-top: 1px solid #e9ecef; z-index: 2200;">
+          <button id="editOk" class="primary" style="position: relative; z-index: 2200;">Apply Changes</button>
+          <button id="editCancel" class="secondary" style="position: relative; z-index: 2200;">Cancel</button>
+        </div>
       `;
 
-      document.body.append(backdrop, overlay);
-      const select = overlay.querySelector('#editChoice');
-      const imgInput = overlay.querySelector('#imgInput');
+          document.body.append(backdrop, overlay);
+          
+          // Handle option selection
+          const options = overlay.querySelectorAll('.edit-option');
+          const editDetails = overlay.querySelector('#editDetails');
+          
+          options.forEach(option => {
+            option.addEventListener('click', () => {
+              // Remove previous selection
+              options.forEach(opt => opt.classList.remove('selected'));
+              option.classList.add('selected');
+              
+              // Add visual feedback
+              option.style.transform = 'scale(0.95)';
+              setTimeout(() => {
+                option.style.transform = '';
+              }, 150);
+              
+              const value = option.getAttribute('data-value');
+              showEditDetails(value);
+            });
+          });
+          
+          function showEditDetails(choice) {
+            // Hide all detail sections
+            overlay.querySelectorAll('#editDetails > div').forEach(div => div.style.display = 'none');
+            editDetails.style.display = 'none';
+            
+            if (choice === 'url') {
+              editDetails.style.display = 'block';
+              overlay.querySelector('#urlEdit').style.display = 'block';
+              const urlInput = overlay.querySelector('#urlInput');
+              urlInput.value = el.getAttribute(attr || 'src') || '';
+            } else if (choice === 'text') {
+              editDetails.style.display = 'block';
+              overlay.querySelector('#textEdit').style.display = 'block';
+              const textInput = overlay.querySelector('#textInput');
+              textInput.value = el.innerText.trim() || '';
+            } else if (choice === 'style') {
+              editDetails.style.display = 'block';
+              overlay.querySelector('#styleEdit').style.display = 'block';
+              const bgColorInput = overlay.querySelector('#bgColorInput');
+              const textColorInput = overlay.querySelector('#textColorInput');
+              const fontSizeInput = overlay.querySelector('#fontSizeInput');
+              
+              // Set current values
+              const computedStyle = window.getComputedStyle(el);
+              bgColorInput.value = rgbToHex(computedStyle.backgroundColor);
+              textColorInput.value = rgbToHex(computedStyle.color);
+              fontSizeInput.value = computedStyle.fontSize;
+              
+              // Add event listeners for bulk styling
+              setupBulkStylingButtons(overlay, el, doc);
+            } else if (choice === 'browse') {
+              editDetails.style.display = 'block';
+              overlay.querySelector('#imageEdit').style.display = 'block';
+              const imageUrlInput = overlay.querySelector('#imageUrlInput');
+              imageUrlInput.value = el.getAttribute(attr || 'src') || '';
+            } else if (choice === 'googleform') {
+              editDetails.style.display = 'block';
+              overlay.querySelector('#googleFormEdit').style.display = 'block';
+            } else if (choice === 'youtube') {
+              editDetails.style.display = 'block';
+              overlay.querySelector('#youtubeEdit').style.display = 'block';
+            }
+          }
+          
+          function rgbToHex(rgb) {
+            if (!rgb || rgb === 'rgba(0, 0, 0, 0)' || rgb === 'transparent') return '#000000';
+            const match = rgb.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+            if (!match) return '#000000';
+            const r = parseInt(match[1]);
+            const g = parseInt(match[2]);
+            const b = parseInt(match[3]);
+            return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+          }
+          
+          backdrop.onclick = () => { overlay.remove(); backdrop.remove(); };
+          overlay.querySelector('#editCancel').onclick = () => { overlay.remove(); backdrop.remove(); };
 
-      select.onchange = () => imgInput.style.display = (select.value === 'browse') ? 'block' : 'none';
-      backdrop.onclick = () => { overlay.remove(); backdrop.remove(); };
+          document.getElementById('editOk').onclick = async () => {
+            const selectedOption = overlay.querySelector('.edit-option.selected');
+            if (!selectedOption) return;
+            
+            const choice = selectedOption.getAttribute('data-value');
+            overlay.remove(); backdrop.remove();
+            if (!choice) return;
 
-      document.getElementById('editOk').onclick = async () => {
-        const choice = select.value;
-        overlay.remove(); backdrop.remove();
-        if (!choice) return;
+            if (choice === 'url') {
+              const urlInput = overlay.querySelector('#urlInput');
+              const newVal = urlInput.value.trim();
+              if (newVal) {
+                if (tag === 'button') {
+                  // Prefer data-link if present
+                  if (el.hasAttribute('data-link')) {
+                    el.setAttribute('data-link', newVal);
+                  } else {
+                    el.setAttribute('onclick', `location.href='${newVal}'`);
+                  }
+                } else {
+                  el.setAttribute(attr || 'src', newVal);
+                  if (tag === 'iframe') el.src = newVal;
+                }
+                saveToHistory();
+              }
+            }
 
-        if (choice === 'url') {
-          const current = el.getAttribute(attr || 'src') || '';
-          const newVal = prompt("Edit URL:", current);
-          if (newVal !== null) {
-            if (tag === 'button') {
-            // Prefer data-link if present
-              if (el.hasAttribute('data-link')) {
-                el.setAttribute('data-link', newVal);
+
+            else if (choice === 'text') {
+              const textInput = overlay.querySelector('#textInput');
+              const newText = textInput.value.trim();
+              
+              if (newText !== null) {
+                // Clear existing content and add new text
+                el.innerHTML = '';
+                el.appendChild(document.createTextNode(newText));
+                saveToHistory();
+              }
+            }
+
+
+
+            else if (choice === 'style') {
+              const bgColorInput = overlay.querySelector('#bgColorInput');
+              const textColorInput = overlay.querySelector('#textColorInput');
+              const fontSizeInput = overlay.querySelector('#fontSizeInput');
+              
+              if (bgColorInput.value) {
+                el.style.backgroundColor = bgColorInput.value;
+              }
+              if (textColorInput.value) {
+                el.style.color = textColorInput.value;
+              }
+              if (fontSizeInput.value) {
+                el.style.fontSize = fontSizeInput.value;
+              }
+              saveToHistory();
+            }
+            
+            else if (choice === 'browse') {
+              const imgInput = overlay.querySelector('#imgInput');
+              const imageUrlInput = overlay.querySelector('#imageUrlInput');
+              
+              // Handle file upload
+              if (imgInput.files && imgInput.files[0]) {
+                const file = imgInput.files[0];
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                  try {
+                    const b64 = reader.result.split(',')[1];
+
+                    // === 1. Delete previous image if needed ===
+                    const prevFile = el.getAttribute('data-image-file');
+                    if (prevFile) {
+                      try {
+                        const res = await fetch(`https://api.github.com/repos/${USERNAME}/${REPO}/contents/${prevFile}`, {
+                          method: 'GET',
+                          headers: { 'Authorization': `Bearer ${TOKEN}` }
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          const deleteRes = await fetch(`https://api.github.com/repos/${USERNAME}/${REPO}/contents/${prevFile}`, {
+                            method: 'DELETE',
+                            headers: {
+                              'Authorization': `Bearer ${TOKEN}`,
+                              'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                              message: `Delete old image ${prevFile}`,
+                              sha: data.sha,
+                              branch: BRANCH
+                            })
+                          });
+                          if (!deleteRes.ok) throw new Error("Could not delete previous image");
+                        }
+                      } catch (err) {
+                        console.warn("No previous image to delete or failed to delete:", err.message);
+                      }
+                    }
+
+                    // === 2. Upload new image ===
+                    const safeName = `img_${Date.now()}_${file.name.replace(/[^a-z0-9.\-_]/gi, '_').toLowerCase()}`;
+                    const githubPath = `images/${safeName}`;
+
+                    await apiCommit(githubPath, b64, `Upload image ${safeName}`);
+
+                    // === 3. Apply new image and track it ===
+                    el.setAttribute(attr || 'src', githubPath);
+                    el.setAttribute('data-image-file', githubPath);
+
+                    if (tag === 'img') el.src = githubPath;
+                    setTimeout(() => attachAllHandlers(doc), 50);
+
+                    alert(`✅ Uploaded and linked: ${githubPath}`);
+                  } catch (err) {
+                    alert('❌ Upload failed: ' + err.message);
+                  }
+                };
+                reader.onerror = () => alert("❌ Could not read file.");
+                reader.readAsDataURL(file);
+              }
+              
+              // Handle URL input
+              else if (imageUrlInput.value.trim()) {
+                const imageUrl = imageUrlInput.value.trim();
+                el.setAttribute(attr || 'src', imageUrl);
+                if (tag === 'img') el.src = imageUrl;
+                setTimeout(() => {
+                  attachAllHandlers(doc);
+                  saveToHistory();
+                }, 50);
+              }
+            }
+
+
+
+            else if (choice === 'dormant') {
+              el.classList.add('dormant');
+              el.classList.remove('dormant-revealed');
+              if (attr) {
+                el.setAttribute(`data-original-${attr}`, el.getAttribute(attr) || '');
+                el.removeAttribute(attr);
+              }
+              if (el.innerText) {
+                el.setAttribute('data-original-text', el.innerText);
+                el.innerText = '';
+              }
+              saveToHistory();
+            }
+
+            else if (choice === 'restore') {
+              el.classList.remove('dormant');
+              el.classList.remove('dormant-revealed');
+              const originalText = el.getAttribute('data-original-text');
+              if (originalText) {
+                el.innerText = originalText;
+                el.removeAttribute('data-original-text');
+              }
+
+              const attrs = ['src', 'href', 'data-link', 'onclick'];
+              attrs.forEach(attr => {
+                const original = el.getAttribute(`data-original-${attr}`);
+                if (original) {
+                  el.setAttribute(attr, original);
+                  el.removeAttribute(`data-original-${attr}`);
+                }
+              });
+              saveToHistory();
+            }
+
+            else if (choice === 'googleform') {
+              const googleFormUrlInput = overlay.querySelector('#googleFormUrlInput');
+              const formUrl = googleFormUrlInput.value.trim();
+              if (!formUrl) return;
+
+              const embedUrl = formUrl.includes("embedded=true")
+                ? formUrl
+                : formUrl.replace('/viewform', '/viewform?embedded=true');
+
+              // Create a new div container for the embed instead of using the existing element
+              const newContainer = doc.createElement('div');
+              newContainer.style.margin = '20px 0';
+              newContainer.style.textAlign = 'center';
+              
+              // Insert the new container after the clicked element
+              el.parentNode.insertBefore(newContainer, el.nextSibling);
+              
+              insertEditableEmbed(newContainer, embedUrl);
+              
+              // Add a visual indicator that the embed was added
+              setTimeout(() => {
+                newContainer.style.outline = '2px solid #28a745';
+                newContainer.style.outlineOffset = '5px';
+                setTimeout(() => {
+                  newContainer.style.outline = '';
+                  newContainer.style.outlineOffset = '';
+                }, 2000);
+              }, 100);
+              saveToHistory();
+            }
+
+            else if (choice === 'removeform') {
+              if (el.tagName === 'IFRAME') {
+                el.remove();
+                return;
+              }
+
+              const iframe = el.querySelector('iframe');
+              if (iframe) {
+                iframe.remove();
               } else {
-                el.setAttribute('onclick', `location.href='${newVal}'`);
+                alert("⚠️ No embedded form found in this element.");
               }
-            } else {
-              el.setAttribute(attr || 'src', newVal);
-              if (tag === 'iframe') el.src = newVal;
             }
-          }
-        }
 
 
-        else if (choice === 'text') {
-          // Recursively find first real text node
-          function findTextNode(node) {
-            if (!node) return null;
-            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) return node;
-            for (let child of node.childNodes) {
-              const found = findTextNode(child);
-              if (found) return found;
-            }
-            return null;
-          }
-
-          const textNode = findTextNode(el);
-          const current = textNode?.textContent.trim() || el.innerText.trim();
-          const newText = prompt("Edit text:", current);
-
-          if (newText !== null) {
-            if (textNode) {
-              textNode.textContent = newText;
-            } else {
-              el.appendChild(document.createTextNode(newText));
-            }
-          }
-        }
-
-
-
-        else if (choice === 'browse') {
-          imgInput.click();
-          imgInput.onchange = async () => {
-            const file = imgInput.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-              try {
-                const b64 = reader.result.split(',')[1];
-                const safeName = file.name.replace(/[^a-z0-9.\-_]/gi, '_').toLowerCase();
-                const githubPath = `images/${safeName}`;
-                await apiCommit(githubPath, b64, `Upload image ${safeName}`);
-
-                el.setAttribute(attr || 'src', githubPath);
-                if (tag === 'img') el.src = githubPath;
-                setTimeout(() => attachAllHandlers(doc), 50);
-                alert(`✅ Uploaded and linked: ${githubPath}`);
-              } catch (err) {
-                alert('❌ Upload failed: ' + err.message);
+            else if (choice === 'youtube') {
+              const youtubeUrlInput = overlay.querySelector('#youtubeUrlInput');
+              const videoUrl = youtubeUrlInput.value.trim();
+              if (!videoUrl) return;
+              
+              // Extract video ID from various YouTube URL formats
+              let videoId = '';
+              const patterns = [
+                /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+                /youtube\.com\/v\/([^&\n?#]+)/
+              ];
+              
+              for (const pattern of patterns) {
+                const match = videoUrl.match(pattern);
+                if (match) {
+                  videoId = match[1];
+                  break;
+                }
               }
-            };
-            reader.onerror = () => alert("❌ Could not read file.");
-            reader.readAsDataURL(file);
+              
+              if (!videoId) {
+                alert('❌ Invalid YouTube URL. Please use a valid YouTube video link.');
+                return;
+              }
+              
+              const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+              
+              // Create a new div container for the embed
+              const newContainer = doc.createElement('div');
+              newContainer.style.margin = '20px 0';
+              newContainer.style.textAlign = 'center';
+              
+              // Insert the new container after the clicked element
+              el.parentNode.insertBefore(newContainer, el.nextSibling);
+              
+              insertEditableEmbed(newContainer, embedUrl);
+              
+              // Add visual indicator
+              setTimeout(() => {
+                newContainer.style.outline = '2px solid #ff0000';
+                newContainer.style.outlineOffset = '5px';
+                setTimeout(() => {
+                  newContainer.style.outline = '';
+                  newContainer.style.outlineOffset = '';
+                }, 2000);
+              }, 100);
+              saveToHistory();
+            }
+            
+            else if (choice === 'copy') {
+              const clonedElement = el.cloneNode(true);
+              // Remove editor-specific attributes from clone
+              clonedElement.removeAttribute('data-editor-attached');
+              clonedElement.onclick = null;
+              
+              // Insert after the original element
+              el.parentNode.insertBefore(clonedElement, el.nextSibling);
+              
+              // Add visual indicator
+              setTimeout(() => {
+                clonedElement.style.outline = '2px solid #28a745';
+                clonedElement.style.outlineOffset = '5px';
+                setTimeout(() => {
+                  clonedElement.style.outline = '';
+                  clonedElement.style.outlineOffset = '';
+                }, 2000);
+              }, 100);
+              saveToHistory();
+            }
+            
+            else if (choice === 'delete') {
+              if (confirm('Are you sure you want to delete this element?')) {
+                el.remove();
+                saveToHistory();
+              }
+            }
+
+            setTimeout(() => {
+              attachAllHandlers(doc);
+              showStatus('✅ Changes applied!', 2000, 'success');
+            }, 100);
           };
-          return;
-        }
+        };
+      });
+    }
 
-        else if (choice === 'dormant') {
+
+
+
+
+
+    function showDormantElements(show) {
+      const doc = frame.contentDocument || frame.contentWindow.document;
+      const dormantEls = doc.querySelectorAll('.dormant, .dormant-revealed');
+
+      dormantEls.forEach(el => {
+        if (show) {
+          // Convert .dormant ➜ .dormant-revealed
+          el.classList.remove('dormant');
+          el.classList.add('dormant-revealed');
+
+          // Restore text
+          const text = el.getAttribute('data-original-text');
+          if (text && el.innerText.trim() === '') {
+            el.innerText = text;
+          }
+
+          // Restore src, href, etc
+          const attrs = ['src', 'href', 'data-link', 'onclick'];
+          attrs.forEach(attr => {
+            const original = el.getAttribute(`data-original-${attr}`);
+            if (original && !el.getAttribute(attr)) {
+              el.setAttribute(attr, original);
+            }
+          });
+        } else {
+          // Convert .dormant-revealed ➜ .dormant
           el.classList.add('dormant');
           el.classList.remove('dormant-revealed');
-          if (attr) {
-            el.setAttribute(`data-original-${attr}`, el.getAttribute(attr) || '');
-            el.removeAttribute(attr);
-          }
-          if (el.innerText) {
-            el.setAttribute('data-original-text', el.innerText);
-            el.innerText = '';
-          }
-        }
 
-        else if (choice === 'restore') {
-          el.classList.remove('dormant');
-          el.classList.remove('dormant-revealed');
-          const originalText = el.getAttribute('data-original-text');
-          if (originalText) {
-            el.innerText = originalText;
-            el.removeAttribute('data-original-text');
-          }
-
+          // Hide content (do NOT delete original values)
+          el.innerText = '';
           const attrs = ['src', 'href', 'data-link', 'onclick'];
-          atts.forEach(attr => {
-            const original = el.getAttribute(`data-original-${attr}`);
-            if (original) {
-              el.setAttribute(attr, original);
-              el.removeAttribute(`data-original-${attr}`);
+          attrs.forEach(attr => {
+            if (el.hasAttribute(attr)) {
+              el.removeAttribute(attr);
             }
           });
         }
+      });
 
-        setTimeout(() => attachAllHandlers(doc), 50);
-      };
+      attachAllHandlers(doc);
+    }
+
+
+
+
+
+    const dormantBtn = document.createElement('button');
+    dormantBtn.textContent = "👁️ Show Dormant";
+    dormantBtn.style.position = "fixed";
+    dormantBtn.style.bottom = "100px";
+    dormantBtn.style.right = "20px";
+    dormantBtn.style.width = "130px";
+    dormantBtn.style.height = "60px";
+    dormantBtn.style.zIndex = "9999";
+    dormantBtn.style.padding = "16px 20px";
+    dormantBtn.style.background = "linear-gradient(135deg, #a55eea, #8854d0)";
+    dormantBtn.style.color = "white";
+    dormantBtn.style.border = "none";
+    dormantBtn.style.cursor = "pointer";
+    dormantBtn.style.fontWeight = "700";
+    dormantBtn.style.boxShadow = "0 10px 30px rgba(165, 94, 234, 0.4)";
+    dormantBtn.style.transition = "all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
+    dormantBtn.style.backdropFilter = "blur(15px)";
+    dormantBtn.style.border = "2px solid rgba(255, 255, 255, 0.3)";
+    dormantBtn.style.textTransform = "uppercase";
+    dormantBtn.style.letterSpacing = "0.5px";
+    dormantBtn.style.overflow = "hidden";
+    dormantBtn.style.animation = "slideIn 0.6s ease-out 0.4s both";
+    dormantBtn.style.clipPath = "polygon(20% 0%, 80% 0%, 100% 50%, 80% 100%, 20% 100%, 0% 50%)";
+    dormantBtn.style.transform = "rotate(0deg)";
+    document.body.appendChild(dormantBtn);
+    let dormantVisible = false;
+    dormantBtn.onclick = () => {
+      dormantVisible = !dormantVisible;
+      showDormantElements(dormantVisible);
+      dormantBtn.textContent = dormantVisible ? "🙈 Hide Dormant" : "👁️ Show Dormant";
     };
-  });
-}
 
 
+    async function apiCommit(path, contentB64, message) {
+      let fileSha = undefined;
 
-
-
-
-function showDormantElements(show) {
-  const doc = frame.contentDocument || frame.contentWindow.document;
-  const dormantEls = doc.querySelectorAll('.dormant, .dormant-revealed');
-
-  dormantEls.forEach(el => {
-    if (show) {
-      // Convert .dormant ➜ .dormant-revealed
-      el.classList.remove('dormant');
-      el.classList.add('dormant-revealed');
-
-      // Restore text
-      const text = el.getAttribute('data-original-text');
-      if (text && el.innerText.trim() === '') {
-        el.innerText = text;
-      }
-
-      // Restore src, href, etc
-      const attrs = ['src', 'href', 'data-link', 'onclick'];
-      attrs.forEach(attr => {
-        const original = el.getAttribute(`data-original-${attr}`);
-        if (original && !el.getAttribute(attr)) {
-          el.setAttribute(attr, original);
+      try {
+        if (path !== FILE_PATH) {
+          // Try to get existing SHA for this file
+          const res = await fetch(`https://api.github.com/repos/${USERNAME}/${REPO}/contents/${path}`, {
+            headers: { 'Authorization': `Bearer ${TOKEN}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            fileSha = data.sha;
+          }
+        } else {
+          fileSha = sha; // known from index.html load
         }
-      });
-    } else {
-      // Convert .dormant-revealed ➜ .dormant
-      el.classList.add('dormant');
-      el.classList.remove('dormant-revealed');
 
-      // Hide content (do NOT delete original values)
-      el.innerText = '';
-      const attrs = ['src', 'href', 'data-link', 'onclick'];
-      attrs.forEach(attr => {
-        if (el.hasAttribute(attr)) {
-          el.removeAttribute(attr);
+        const res = await fetch(`https://api.github.com/repos/${USERNAME}/${REPO}/contents/${path}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message,
+            content: contentB64,
+            sha: fileSha,
+            branch: BRANCH
+          })
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(`GitHub API error: ${errorData.message || res.statusText}`);
         }
-      });
-    }
-  });
 
-  attachAllHandlers(doc);
-}
-
-
-
-
-
-const dormantBtn = document.createElement('button');
-dormantBtn.textContent = "👁️ Show Dormant";
-dormantBtn.style.position = "fixed";
-dormantBtn.style.bottom = "65px";
-dormantBtn.style.right = "20px";
-dormantBtn.style.zIndex = "1001";
-document.body.appendChild(dormantBtn);
-let dormantVisible = false;
-dormantBtn.onclick = () => {
-  dormantVisible = !dormantVisible;
-  showDormantElements(dormantVisible);
-  dormantBtn.textContent = dormantVisible ? "🙈 Hide Dormant" : "👁️ Show Dormant";
-};
-
-
-async function apiCommit(path, contentB64, message) {
-  let fileSha = undefined;
-
-  if (path !== FILE_PATH) {
-    // Try to get existing SHA for this file
-    const res = await fetch(`https://api.github.com/repos/${USERNAME}/${REPO}/contents/${path}`, {
-      headers: { 'Authorization': `Bearer ${TOKEN}` }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      fileSha = data.sha;
-    }
-  } else {
-    fileSha = sha; // known from index.html load
-  }
-
-  const res = await fetch(`https://api.github.com/repos/${USERNAME}/${REPO}/contents/${path}`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      message,
-      content: contentB64,
-      sha: fileSha,
-      branch: BRANCH
-    })
-  });
-
-  return res.ok ? await res.json() : Promise.reject(await res.json());
-}
-
-
-
-async function loadHTML(){
-  try{
-    const r=await fetch(`https://api.github.com/repos/${USERNAME}/${REPO}/contents/${FILE_PATH}`,{ headers:{ 'Authorization':`Bearer ${TOKEN}` }});
-    const j=await r.json();
-    const html=atob(j.content);
-    sha=j.sha;
-    frame.srcdoc = html;
-  }catch(e){alert('Load failed:'+e);}
-}
-
-
-frame.onload = () => {
-  const doc = frame.contentDocument;
-  doc._iframeSpaceHeld = false;
-  doc.addEventListener('keydown', ev => { if (ev.code === 'Space') doc._iframeSpaceHeld = true; });
-  doc.addEventListener('keyup', ev => { if (ev.code === 'Space') doc._iframeSpaceHeld = false; });
-  showDormantElements(dormantVisible);
-  attachAllHandlers(doc);
-};
-
-
-const commitBtn=document.getElementById('commitBtn');
-commitBtn.onclick = async () => {
-  try {
-    const doc = frame.contentDocument || frame.contentWindow.document;
-
-    // 🔍 Temporarily show all dormant content
-    const dormantEls = doc.querySelectorAll('.dormant, .dormant-revealed');
-    dormantEls.forEach(el => {
-      if (el.classList.contains('dormant-revealed')) {
-        el.classList.remove('dormant-revealed');
-        el.classList.add('dormant');
+        return await res.json();
+      } catch (error) {
+        console.error('API commit failed:', error);
+        throw error;
       }
-    });
+    }
 
-    // ✅ Ensure dormant style is injected (already correct)
-    const dormantStyle = `.dormant {
+
+
+    async function loadHTML() {
+      try {
+        const r = await fetch(`https://api.github.com/repos/${USERNAME}/${REPO}/contents/${FILE_PATH}`, { 
+          headers: { 'Authorization': `Bearer ${TOKEN}` } 
+        });
+        
+        if (!r.ok) {
+          throw new Error(`Failed to load file: ${r.status} ${r.statusText}`);
+        }
+        
+        const j = await r.json();
+        const html = atob(j.content);
+        sha = j.sha;
+        frame.srcdoc = html;
+      } catch (e) { 
+        console.error('Load failed:', e);
+        alert('Load failed: ' + e.message);
+      }
+    }
+
+
+    frame.onload = () => {
+      const doc = frame.contentDocument;
+      console.log('Frame loaded, setting up handlers...');
+      doc._iframeSpaceHeld = false;
+      upgradeAllIframes(doc);
+      doc.addEventListener('keydown', ev => { if (ev.code === 'Space') doc._iframeSpaceHeld = true; });
+      doc.addEventListener('keyup', ev => { if (ev.code === 'Space') doc._iframeSpaceHeld = false; });
+      showDormantElements(dormantVisible);
+      attachAllHandlers(doc);
+      console.log('Frame setup complete');
+      
+      // Initialize history with current state
+      setTimeout(() => initializeHistory(), 100);
+      
+      // Start auto-save
+      startAutoSave();
+      showStatus('🚀 Editor ready!', 2000, 'success');
+    };
+
+
+    const commitBtn = document.getElementById('commitBtn');
+    commitBtn.onclick = async () => {
+      try {
+        // Show loading state
+        const originalText = commitBtn.textContent;
+        const spinner = commitBtn.querySelector('.spinner');
+        const commitStatus = document.getElementById('commitStatus');
+        
+        commitBtn.textContent = '⏳ Committing...';
+        commitBtn.disabled = true;
+        spinner.style.display = 'inline-block';
+        commitStatus.style.display = 'block';
+        
+        // Start progress animation
+        showProgress(25);
+        showStatus('🔄 Preparing changes...', 0, 'info');
+        
+        const doc = frame.contentDocument || frame.contentWindow.document;
+
+        // 🔍 Temporarily show all dormant content
+        const dormantEls = doc.querySelectorAll('.dormant, .dormant-revealed');
+        dormantEls.forEach(el => {
+          if (el.classList.contains('dormant-revealed')) {
+            el.classList.remove('dormant-revealed');
+            el.classList.add('dormant');
+          }
+        });
+
+        // 🔐 Clean HTML for commit (remove editor-specific elements)
+        const cleanDoc = doc.cloneNode(true);
+        
+        // ✅ Ensure all necessary styles are injected
+        const requiredStyles = `
+    .dormant {
       display: none !important;
       visibility: hidden !important;
       opacity: 0 !important;
@@ -472,32 +2397,139 @@ commitBtn.onclick = async () => {
       background: #fffbe6 !important;
       color: #e67e22 !important;
       cursor: pointer !important;
-    }`;
-    let head = doc.querySelector('head');
-    if (head && !doc.querySelector('style[data-dormant]')) {
-      const style = doc.createElement('style');
-      style.setAttribute('data-dormant', 'yes');
-      style.textContent = dormantStyle;
-      head.appendChild(style);
     }
+    .editable-form-embed {
+      width: 100% !important;
+      height: 500px;
+      display: block;
+      border: none;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    .iframe-wrapper {
+      position: relative;
+      display: inline-block;
+      overflow: hidden;
+    }
+    .iframe-overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: transparent;
+      z-index: 1000;
+      cursor: pointer;
+    }`;
+        
+        const head = cleanDoc.querySelector('head');
+        if (head) {
+          // Remove any existing editor styles
+          cleanDoc.querySelectorAll('style[data-dormant], style[data-editor]').forEach(el => el.remove());
+          
+          // Add fresh styles
+          const style = cleanDoc.createElement('style');
+          style.setAttribute('data-editor', 'yes');
+          style.textContent = requiredStyles;
+          head.appendChild(style);
+        }
+        
+        // Clean up editor-specific elements and convert back to simple iframes
+        cleanDoc.querySelectorAll('[data-editor-attached]').forEach(el => {
+          el.removeAttribute('data-editor-attached');
+        });
+        
+        // Remove edit buttons and convert wrapped iframes back to simple iframes
+        cleanDoc.querySelectorAll('div[style*="position: relative"]').forEach(wrapper => {
+          const iframe = wrapper.querySelector('iframe');
+          const editButton = wrapper.querySelector('button');
+          
+          if (iframe) {
+            // Get the wrapper's dimensions
+            const width = wrapper.style.width || '100%';
+            const height = wrapper.style.height || '500px';
+            
+            // Apply dimensions to iframe
+            iframe.style.width = width;
+            iframe.style.height = height;
+            iframe.style.border = 'none';
+            iframe.style.display = 'block';
+            iframe.style.margin = '0 auto';
+            iframe.style.boxSizing = 'border-box';
+            iframe.style.maxWidth = '100%';
+            
+            // Remove edit button
+            if (editButton) {
+              editButton.remove();
+            }
+            
+            // Move iframe out of wrapper and remove wrapper
+            wrapper.parentNode.insertBefore(iframe, wrapper);
+            wrapper.remove();
+          }
+        });
+        
 
-    // 🔐 Serialize and commit HTML
-    const newHTML = doc.documentElement.outerHTML;
-    const enc = btoa(unescape(encodeURIComponent(newHTML)));
-    await apiCommit(FILE_PATH, enc, 'Commit from editor');
-    alert('✅ Committed');
+        
 
-    // 🔄 Reload content and restore view
-    await loadHTML();
+        
+        // Final cleanup: Remove any remaining editor-specific styles from iframes
+        cleanDoc.querySelectorAll('iframe').forEach(iframe => {
+          // Remove any editor-specific inline styles
+          iframe.style.outline = '';
+          iframe.style.transition = '';
+          iframe.style.zIndex = '';
+          iframe.style.pointerEvents = '';
+          
+          // Ensure clean styling
+          iframe.style.border = 'none';
+          iframe.style.display = 'block';
+          iframe.style.margin = '0 auto';
+          iframe.style.boxSizing = 'border-box';
+          iframe.style.maxWidth = '100%';
+        });
+        
+        // 🔐 Serialize and commit cleaned HTML
+        showProgress(75);
+        showStatus('💾 Uploading to GitHub...', 0, 'info');
+        
+        const newHTML = cleanDoc.documentElement.outerHTML;
+        const enc = btoa(unescape(encodeURIComponent(newHTML)));
+        await apiCommit(FILE_PATH, enc, 'Commit from editor');
+        
+        // 🔄 Reload content and restore view
+        showProgress(90);
+        showStatus('🔄 Reloading content...', 0, 'info');
+        await loadHTML();
+        
+        // Show success
+        showProgress(100);
+        showStatus('✅ Successfully committed!', 3000, 'success');
+        commitStatus.style.display = 'none';
+        commitBtn.textContent = '✅ Committed!';
+        spinner.style.display = 'none';
+        setTimeout(() => {
+          commitBtn.textContent = originalText;
+          commitBtn.disabled = false;
+        }, 2000);
+      } catch (e) {
+        console.error('Commit failed:', e);
+        alert('Commit failed: ' + e.message);
+        
+        // Restore button state
+        showProgress(0);
+        showStatus('❌ Commit failed!', 3000, 'error');
+        commitStatus.style.display = 'none';
+        spinner.style.display = 'none';
+        commitBtn.textContent = originalText;
+        commitBtn.disabled = false;
+      }
+    };
 
-  } catch (e) {
-    alert('Commit failed: ' + JSON.stringify(e));
-  }
-};
 
 
+    loadHTML();
 
-loadHTML();
-</script>
+  </script>
 </body>
+
 </html>
