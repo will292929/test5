@@ -586,6 +586,80 @@
       box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
     }
 
+    .edit-overlay .form-group {
+      margin-bottom: 15px;
+    }
+
+    .edit-overlay .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .edit-overlay .form-group input[type="checkbox"] {
+      margin-right: 8px;
+      transform: scale(1.2);
+    }
+
+    .edit-overlay .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    .edit-overlay button.danger {
+      background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+    }
+
+    .edit-overlay button.danger:hover {
+      background: linear-gradient(135deg, #ff8a8a, #ff6b6b);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+    }
+
+    /* Page Selector Styles */
+    #pageSelect {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      background-size: 20px;
+      padding-right: 35px !important;
+    }
+
+    #pageSelect:focus {
+      border-color: #007bff !important;
+      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2) !important;
+      background-color: rgba(255, 255, 255, 0.2) !important;
+    }
+
+    #pageSelect option {
+      background-color: #2c3e50;
+      color: white;
+      padding: 8px 12px;
+      font-size: 14px;
+    }
+
+    #pageSelect option:hover {
+      background-color: #34495e;
+    }
+
+    #pageSelect option:checked {
+      background-color: #007bff;
+    }
+
     .edit-options-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -741,6 +815,15 @@
   <div id="editor">
     <iframe id="pageFrame"></iframe>
   </div>
+  
+  <!-- Page Selector Dropdown -->
+  <div id="pageSelector" style="position: fixed; top: 20px; left: 20px; z-index: 10000; background: linear-gradient(135deg, rgba(0,0,0,0.95), rgba(0,0,0,0.9)); padding: 15px 20px; border-radius: 12px; backdrop-filter: blur(15px); box-shadow: 0 8px 25px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); min-width: 220px;">
+    <label for="pageSelect" style="color: white; font-weight: 600; margin-bottom: 8px; display: block; font-size: 14px;">📄 Select Page:</label>
+    <select id="pageSelect" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.15); color: white; font-size: 14px; cursor: pointer; font-weight: 500; transition: all 0.3s ease; outline: none;">
+      <!-- Pages will be populated by JavaScript -->
+    </select>
+  </div>
+  
   <button id="commitBtn" style="position: fixed; bottom: 20px; right: 20px; width: 130px; height: 60px; z-index: 9999;">
     <div class="spinner"></div>
     💾 Commit Changes
@@ -780,6 +863,92 @@
       alert('⚠️ Invalid token format. Please use a GitHub Personal Access Token.');
       TOKEN = prompt('Enter valid GitHub Token:');
       if (TOKEN) localStorage.setItem('github_token', TOKEN);
+    }
+    
+    // Page selector functionality
+    // ADD NEW PAGES HERE - just add a new line with the filename
+    const AVAILABLE_PAGES = [
+      'index.html',
+      'about.html',
+      'contact.html',
+      'services.html',
+      'portfolio.html',
+      'blog.html',
+      'pricing.html',
+      'faq.html'
+    ];
+    
+    // Initialize page selector dropdown
+    function initializePageSelector() {
+      const pageSelect = document.getElementById('pageSelect');
+      const pageSelector = document.getElementById('pageSelector');
+      
+      // Ensure the page selector is visible
+      pageSelector.style.display = 'block';
+      pageSelector.style.visibility = 'visible';
+      pageSelector.style.opacity = '1';
+      
+      // Clear existing options
+      pageSelect.innerHTML = '';
+      
+      // Add options for each available page
+      AVAILABLE_PAGES.forEach(page => {
+        const option = document.createElement('option');
+        option.value = page;
+        option.textContent = page;
+        if (page === FILE_PATH) {
+          option.selected = true;
+        }
+        pageSelect.appendChild(option);
+      });
+      
+      // Ensure the select element is properly styled and visible
+      pageSelect.style.display = 'block';
+      pageSelect.style.visibility = 'visible';
+      pageSelect.style.opacity = '1';
+      pageSelect.style.zIndex = '10001';
+      
+      // Add change event listener
+      pageSelect.addEventListener('change', function() {
+        const selectedPage = this.value;
+        if (selectedPage !== FILE_PATH) {
+          switchPage(selectedPage);
+        }
+      });
+      
+      // Add click event to ensure dropdown opens
+      pageSelect.addEventListener('click', function(e) {
+        e.stopPropagation();
+        this.focus();
+      });
+      
+      console.log('Page selector initialized with', AVAILABLE_PAGES.length, 'pages');
+    }
+    
+    // Function to switch pages
+    async function switchPage(newPage) {
+      try {
+        showStatus(`🔄 Switching to ${newPage}...`, 2000, 'info');
+        
+        // Save current state if needed
+        const doc = frame.contentDocument || frame.contentWindow.document;
+        if (doc && doc.documentElement) {
+          // You could save the current page state here if needed
+        }
+        
+        // Update FILE_PATH and load new page
+        FILE_PATH = newPage;
+        await loadHTML();
+        
+        // Reset history for new page
+        initializeHistory();
+        
+        showStatus(`✅ Switched to ${newPage}`, 2000, 'success');
+        
+      } catch (error) {
+        console.error('Failed to switch page:', error);
+        showStatus(`❌ Failed to load ${newPage}`, 3000, 'error');
+      }
     }
     
     // History for undo functionality
@@ -1569,12 +1738,34 @@
           backdrop.className = 'edit-backdrop';
 
           overlayBox.innerHTML = `
-            <label>Edit Embed:</label>
-            <select id="editChoice">
-              <option value="">Cancel</option>
-              <option value="remove">Remove Embed</option>
-            </select>
-            <button id="editOk">OK</button>
+            <h3>Edit Iframe</h3>
+            <div class="form-group">
+              <label for="iframeSrc">Source URL:</label>
+              <input type="text" id="iframeSrc" value="${iframe.src || ''}" placeholder="Enter iframe URL">
+            </div>
+            <div class="form-group">
+              <label for="iframeWidth">Width:</label>
+              <input type="text" id="iframeWidth" value="${width}" placeholder="e.g., 100%, 500px">
+            </div>
+            <div class="form-group">
+              <label for="iframeHeight">Height:</label>
+              <input type="text" id="iframeHeight" value="${height}" placeholder="e.g., 500px, 100vh">
+            </div>
+            <div class="form-group">
+              <label for="iframeTitle">Title (for accessibility):</label>
+              <input type="text" id="iframeTitle" value="${iframe.title || ''}" placeholder="Enter iframe title">
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="makeDormant" ${iframe.classList.contains('dormant') ? 'checked' : ''}>
+                Make Dormant (hide from normal view)
+              </label>
+            </div>
+            <div class="button-group">
+              <button id="editOk" class="primary">Apply Changes</button>
+              <button id="editCancel" class="secondary">Cancel</button>
+              <button id="removeIframe" class="danger">Remove Iframe</button>
+            </div>
           `;
 
           doc.body.append(backdrop, overlayBox);
@@ -1584,15 +1775,49 @@
             backdrop.remove();
           };
 
+          // Apply Changes button
           doc.getElementById('editOk').onclick = () => {
-            const choice = doc.getElementById('editChoice').value;
+            const newSrc = doc.getElementById('iframeSrc').value;
+            const newWidth = doc.getElementById('iframeWidth').value;
+            const newHeight = doc.getElementById('iframeHeight').value;
+            const newTitle = doc.getElementById('iframeTitle').value;
+            const makeDormant = doc.getElementById('makeDormant').checked;
+            
+            // Update iframe properties
+            if (newSrc) iframe.src = newSrc;
+            if (newTitle) iframe.title = newTitle;
+            
+            // Update wrapper dimensions
+            if (newWidth) wrapper.style.width = newWidth;
+            if (newHeight) wrapper.style.height = newHeight;
+            
+            // Handle dormant state
+            if (makeDormant) {
+              iframe.classList.add('dormant');
+              wrapper.classList.add('dormant');
+            } else {
+              iframe.classList.remove('dormant');
+              wrapper.classList.remove('dormant');
+            }
+            
             overlayBox.remove();
             backdrop.remove();
-
-            if (choice === 'remove') {
-              wrapper.remove();
-              setTimeout(() => attachAllHandlers(doc), 0);
-            }
+            showStatus('✅ Iframe updated successfully', 2000, 'success');
+          };
+          
+          // Cancel button
+          doc.getElementById('editCancel').onclick = () => {
+            overlayBox.remove();
+            backdrop.remove();
+          };
+          
+          // Remove iframe button
+          doc.getElementById('removeIframe').onclick = () => {
+            wrapper.remove();
+            overlayBox.remove();
+            backdrop.remove();
+            setTimeout(() => attachAllHandlers(doc), 0);
+            showStatus('🗑️ Iframe removed', 2000, 'info');
           };
         };
         
@@ -2527,6 +2752,8 @@
 
 
 
+    // Initialize page selector and load initial page
+    initializePageSelector();
     loadHTML();
 
   </script>
